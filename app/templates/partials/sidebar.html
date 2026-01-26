@@ -1,0 +1,128 @@
+<aside class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+        <a href="{{ url_for('home.dashboard') }}">
+            {% set icon_url = url_for('admin.serve_icon') %}
+            <img src="{{ icon_url }}" alt="Feature Requestor" class="logo" onerror="this.onerror=null; this.src='{{ url_for('static', filename='images/logo.png') }}'; this.onerror=function(){this.style.display='none'; this.parentElement.style.display='none';};">
+        </a>
+        <button class="sidebar-toggle" id="sidebar-toggle" onclick="toggleSidebar()" aria-label="Toggle sidebar">
+            <span class="hamburger-icon">☰</span>
+        </button>
+    </div>
+    <nav class="sidebar-nav">
+        <a href="{{ url_for('home.dashboard') }}" class="nav-item {% if request.endpoint == 'home.dashboard' %}active{% endif %}">Home</a>
+        <a href="{{ url_for('apps.browse') }}" class="nav-item {% if request.endpoint and 'apps' in request.endpoint %}active{% endif %}">Browse Apps</a>
+        <a href="{{ url_for('feature_requests.list') }}" class="nav-item {% if request.endpoint and 'feature_requests' in request.endpoint %}active{% endif %}">Feature Requests</a>
+        <a href="{{ url_for('messages.index') }}" class="nav-item {% if request.endpoint and 'messages' in request.endpoint %}active{% endif %}" style="position: relative; display: flex; align-items: center;">
+            {% if unread_message_count > 0 %}
+            <span class="notification-badge" style="background-color: white; color: #1f2937; border-radius: 50%; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; font-size: 0.75rem; font-weight: 600; margin-right: 0.5rem; flex-shrink: 0;">{{ unread_message_count }}</span>
+            {% endif %}
+            <span>Messages</span>
+        </a>
+        <a href="{{ url_for('notifications.index') }}" class="nav-item {% if request.endpoint and 'notifications' in request.endpoint %}active{% endif %}" style="position: relative; display: flex; align-items: center;">
+            {% if unread_notification_count > 0 %}
+            <span class="notification-badge" style="background-color: white; color: #1f2937; border-radius: 50%; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; font-size: 0.75rem; font-weight: 600; margin-right: 0.5rem; flex-shrink: 0;">{{ unread_notification_count }}</span>
+            {% endif %}
+            <span>Notifications</span>
+        </a>
+        <a href="{{ url_for('account.settings') }}" class="nav-item {% if request.endpoint and 'account' in request.endpoint and request.endpoint != 'account.payment_history' %}active{% endif %}">My Account</a>
+        <a href="{{ url_for('account.payment_history') }}" class="nav-item {% if request.endpoint == 'account.payment_history' %}active{% endif %}">Payment History</a>
+        <a href="{{ url_for('rules.index') }}" class="nav-item {% if request.endpoint == 'rules.index' %}active{% endif %}">Rules</a>
+        {% if current_user.role == 'admin' %}
+            <a href="{{ url_for('admin.index') }}" class="nav-item {% if request.endpoint and 'admin' in request.endpoint %}active{% endif %}">Admin Panel</a>
+        {% endif %}
+        <a href="{{ url_for('auth.logout') }}" class="nav-item">Logout</a>
+    </nav>
+</aside>
+<script>
+function toggleSidebar() {
+    const sidebar = document.getElementById('sidebar');
+    const floatingToggle = document.getElementById('sidebar-toggle-floating');
+    const main = document.querySelector('.main-with-sidebar');
+    const isMobile = window.innerWidth <= 768;
+    
+    if (isMobile) {
+        // On mobile, toggle mobile-open class
+        sidebar.classList.toggle('mobile-open');
+    } else {
+        // On desktop, toggle collapsed class
+        const isCollapsed = sidebar.classList.toggle('collapsed');
+        // Add class to body for CSS targeting
+        if (isCollapsed) {
+            document.body.classList.add('sidebar-collapsed');
+            if (floatingToggle) {
+                floatingToggle.style.display = 'block';
+            }
+        } else {
+            document.body.classList.remove('sidebar-collapsed');
+            if (floatingToggle) {
+                floatingToggle.style.display = 'none';
+            }
+        }
+        // Store preference in localStorage
+        localStorage.setItem('sidebarCollapsed', isCollapsed);
+    }
+}
+
+// Restore sidebar state on load (desktop only)
+document.addEventListener('DOMContentLoaded', function() {
+    const sidebar = document.getElementById('sidebar');
+    const floatingToggle = document.getElementById('sidebar-toggle-floating');
+    const isMobile = window.innerWidth <= 768;
+    
+    function updateFloatingToggle() {
+        if (!isMobile && floatingToggle) {
+            const isCollapsed = sidebar.classList.contains('collapsed');
+            if (isCollapsed) {
+                floatingToggle.style.display = 'block';
+            } else {
+                floatingToggle.style.display = 'none';
+            }
+        } else if (floatingToggle) {
+            floatingToggle.style.display = 'none';
+        }
+    }
+    
+    if (!isMobile) {
+        const isCollapsed = localStorage.getItem('sidebarCollapsed') === 'true';
+        if (isCollapsed) {
+            sidebar.classList.add('collapsed');
+            document.body.classList.add('sidebar-collapsed');
+        }
+        updateFloatingToggle();
+    }
+    
+    // Update floating toggle when sidebar state changes
+    const observer = new MutationObserver(function(mutations) {
+        mutations.forEach(function(mutation) {
+            if (mutation.type === 'attributes' && mutation.attributeName === 'class') {
+                updateFloatingToggle();
+            }
+        });
+    });
+    
+    if (sidebar) {
+        observer.observe(sidebar, { attributes: true, attributeFilter: ['class'] });
+    }
+    
+    // Close mobile sidebar when clicking outside
+    document.addEventListener('click', function(event) {
+        if (window.innerWidth <= 768) {
+            const sidebar = document.getElementById('sidebar');
+            const toggle = document.getElementById('sidebar-toggle');
+            const floatingToggle = document.getElementById('sidebar-toggle-floating');
+            if (sidebar && sidebar.classList.contains('mobile-open') && 
+                !sidebar.contains(event.target) && 
+                !toggle.contains(event.target) &&
+                (!floatingToggle || !floatingToggle.contains(event.target))) {
+                sidebar.classList.remove('mobile-open');
+            }
+        }
+    });
+    
+    // Handle window resize
+    window.addEventListener('resize', function() {
+        updateFloatingToggle();
+    });
+});
+</script>
+

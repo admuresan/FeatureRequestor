@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+
+{% block title %}Edit Request - Feature Requestor{% endblock %}
+
+{% block content %}
+<div class="edit-request">
+    <h1>Edit Request</h1>
+    <p><strong>Request:</strong> {{ feature_request.title }}</p>
+    
+    <form method="POST" action="{{ url_for('feature_requests.edit_request', request_id=feature_request.id) }}">
+        <div class="form-group">
+            <label for="request_type">Request Type:</label>
+            <select id="request_type" name="request_type" required>
+                <option value="UI/UX" {% if feature_request.request_type == 'UI/UX' %}selected{% endif %}>UI/UX</option>
+                <option value="backend" {% if feature_request.request_type == 'backend' %}selected{% endif %}>Backend</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="request_category">Request Category:</label>
+            <select id="request_category" name="request_category" required>
+                <option value="bug" {% if feature_request.request_category == 'bug' %}selected{% endif %}>Bug</option>
+                <option value="enhancement" {% if feature_request.request_category == 'enhancement' %}selected{% endif %}>Enhancement</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="projected_completion_date">Projected Completion Date:</label>
+            <input type="date" id="projected_completion_date" name="projected_completion_date" 
+                   value="{{ feature_request.projected_completion_date.strftime('%Y-%m-%d') if feature_request.projected_completion_date else '' }}">
+        </div>
+        <button type="submit" class="btn btn-primary">Update Request</button>
+        <a href="{{ url_for('feature_requests.detail', request_id=feature_request.id) }}" class="btn btn-secondary">Cancel</a>
+    </form>
+</div>
+{% endblock %}
+

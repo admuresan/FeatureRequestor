@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Feature Requestor{% endblock %}</title>
+    {% if has_custom_icon and icon_url %}
+        <link rel="icon" href="{{ icon_url }}">
+    {% else %}
+        <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📋</text></svg>">
+    {% endif %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
+    <!-- Quill.js Rich Text Editor -->
+    <link href="https://cdn.quilljs.com/1.3.6/quill.snow.css" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/rich-text-editor.css') }}">
+    {% block extra_head %}{% endblock %}
+</head>
+<body>
+    {% if current_user.is_authenticated %}
+        {% include 'partials/sidebar.html' %}
+        <!-- Floating toggle button that appears when sidebar is collapsed -->
+        <button class="sidebar-toggle-floating" id="sidebar-toggle-floating" onclick="toggleSidebar()" aria-label="Toggle sidebar" style="display: none;">
+            <span class="hamburger-icon">☰</span>
+        </button>
+    {% else %}
+        {% include 'partials/header.html' %}
+    {% endif %}
+    
+    <main class="{% if current_user.is_authenticated %}main-with-sidebar{% else %}main-full{% endif %}">
+        {% if is_view_as_mode and actual_admin %}
+        <div class="view-as-banner" style="background-color: #fbbf24; color: #78350f; padding: 1rem; text-align: center; border-bottom: 2px solid #f59e0b; display: flex; align-items: center; justify-content: center; gap: 1rem;">
+            <strong>⚠️ Viewing as {{ current_user.name }} ({{ current_user.username }})</strong>
+            <span style="opacity: 0.8;">|</span>
+            <span>Admin: {{ actual_admin.name }}</span>
+            <form method="POST" action="{{ url_for('admin.exit_view_as') }}" style="display: inline; margin-left: 1rem;">
+                <button type="submit" class="btn btn-sm" style="background-color: #78350f; color: white; border: none; padding: 0.5rem 1rem; border-radius: 4px; cursor: pointer;">Exit View As</button>
+            </form>
+        </div>
+        {% endif %}
+        
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <div class="flash-messages">
+                    {% for category, message in messages %}
+                        <div class="flash-message flash-{{ category }}">{{ message }}</div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        {% endwith %}
+        
+        {% block content %}{% endblock %}
+    </main>
+    
+    <script src="{{ url_for('static', filename='js/error-handling.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+    <!-- Quill.js Rich Text Editor -->
+    <script src="https://cdn.quilljs.com/1.3.6/quill.js"></script>
+    <script src="{{ url_for('static', filename='js/rich-text-editor.js') }}"></script>
+    {% block extra_scripts %}{% endblock %}
+</body>
+</html>
+

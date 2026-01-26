@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+
+{% block title %}Payment Ratios - {{ feature_request.title }}{% endblock %}
+
+{% block content %}
+<div class="payment-ratios-page">
+    <h1>Payment Ratio Management</h1>
+    <p><strong>Request:</strong> <a href="{{ url_for('feature_requests.detail', request_id=feature_request.id) }}">{{ feature_request.title }}</a></p>
+    
+    <div class="ratios-section">
+        <h2>Payment Distribution</h2>
+        <form method="POST" action="{{ url_for('feature_requests.payment_ratios', request_id=feature_request.id) }}">
+            <input type="hidden" name="action" value="set_ratios">
+            <table class="ratios-table">
+                <thead>
+                    <tr>
+                        <th>Developer</th>
+                        <th>Percentage</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for dev_rel in developers %}
+                        {% set ratio = payment_ratios.get(dev_rel.developer_id) %}
+                        <tr>
+                            <td>{{ dev_rel.developer.name }}</td>
+                            <td>
+                                <input type="number" 
+                                       name="ratio_{{ dev_rel.developer_id }}" 
+                                       min="0" 
+                                       max="100" 
+                                       step="0.01" 
+                                       value="{{ ratio.ratio_percentage if ratio else (100.0 / developers|length) }}" 
+                                       required>
+                                %
+                            </td>
+                            <td>
+                                {% if ratio and ratio.is_accepted %}
+                                    <span class="badge badge-success">Accepted</span>
+                                {% elif ratio %}
+                                    <span class="badge badge-warning">Pending</span>
+                                {% else %}
+                                    <span class="badge badge-secondary">Not Set</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            <button type="submit" class="btn btn-primary">Update Ratios</button>
+            <p class="help-text">Note: When ratios are updated, all acceptances are reset and developers must accept again.</p>
+        </form>
+    </div>
+    
+    <div class="accept-section">
+        <h2>Accept Payment Ratio</h2>
+        {% set user_ratio = payment_ratios.get(current_user.id) %}
+        {% if user_ratio %}
+            <p>Your payment ratio: <strong>{{ user_ratio.ratio_percentage }}%</strong></p>
+            {% if not user_ratio.is_accepted %}
+                <form method="POST" action="{{ url_for('feature_requests.payment_ratios', request_id=feature_request.id) }}" style="display:inline;">
+                    <input type="hidden" name="action" value="accept_ratio">
+                    <button type="submit" class="btn btn-success">Accept Ratio</button>
+                </form>
+            {% else %}
+                <p class="text-success">✓ You have accepted this ratio.</p>
+            {% endif %}
+        {% else %}
+            <p>No payment ratio set for you yet.</p>
+        {% endif %}
+    </div>
+    
+    {% if all_accepted %}
+        <div class="alert alert-success">
+            <strong>All developers have accepted the payment ratios!</strong> Payments will be distributed according to these ratios when the request is confirmed.
+        </div>
+    {% else %}
+        <div class="alert alert-info">
+            Waiting for all developers to accept the payment ratios. Currently {{ payment_ratios.values()|selectattr('is_accepted')|list|length }} of {{ developers|length }} developers have accepted.
+        </div>
+    {% endif %}
+    
+    <div class="messages-section">
+        <h2>Messages</h2>
+        <div class="messages-list">
+            {% for message in messages %}
+                <div class="message">
+                    <strong>{{ message.sender.username }}</strong> 
+                    <span class="message-date">{{ message.created_at.strftime('%Y-%m-%d %H:%M') }}</span>
+                    <p>{{ message.message }}</p>
+                </div>
+            {% else %}
+                <p>No messages yet.</p>
+            {% endfor %}
+        </div>
+        
+        <form method="POST" action="{{ url_for('feature_requests.payment_ratios', request_id=feature_request.id) }}">
+            <input type="hidden" name="action" value="add_message">
+            <div class="form-group">
+                <label for="message">Add Message:</label>
+                <textarea id="message" name="message" rows="3" required></textarea>
+            </div>
+            <button type="submit" class="btn btn-primary">Send Message</button>
+        </form>
+    </div>
+    
+    <a href="{{ url_for('feature_requests.detail', request_id=feature_request.id) }}" class="btn btn-secondary">Back to Request</a>
+</div>
+{% endblock %}
+

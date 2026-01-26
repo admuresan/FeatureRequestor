@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+
+{% block title %}Notifications - Feature Requestor{% endblock %}
+
+{% block content %}
+<div class="notifications-page">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+        <h1>Notifications</h1>
+        {% if unread_count > 0 %}
+        <form method="POST" action="{{ url_for('notifications.mark_all_read') }}" style="display: inline;">
+            <button type="submit" class="btn btn-secondary" onclick="return confirm('Mark all notifications as read?');">Mark All Read</button>
+        </form>
+        {% endif %}
+    </div>
+    
+    {% if notifications %}
+        <div class="notifications-list">
+            {% for notification in notifications %}
+                <div class="notification-item {% if not notification.is_read %}unread{% endif %}" 
+                     style="padding: 1rem; margin-bottom: 1rem; border: 1px solid #e5e7eb; border-radius: 8px; background-color: {% if not notification.is_read %}#fef3c7{% else %}#ffffff{% endif %}; border-left: 4px solid {% if not notification.is_read %}#f59e0b{% else %}#9ca3af{% endif %};">
+                    <div style="display: flex; justify-content: space-between; align-items: start; gap: 1rem;">
+                        <div style="flex: 1;">
+                            <div style="display: flex; gap: 1rem; margin-bottom: 0.5rem; align-items: center;">
+                                <span style="font-size: 0.875rem; color: #6b7280;">{{ notification.created_at.strftime('%Y-%m-%d %H:%M') }}</span>
+                                <span style="font-size: 0.875rem; font-weight: 600; color: #3b82f6; text-transform: capitalize;">{{ notification.notification_type.replace('_', ' ') }}</span>
+                                {% if not notification.is_read %}
+                                <span style="font-size: 0.75rem; background-color: #f59e0b; color: white; padding: 0.25rem 0.5rem; border-radius: 4px;">Unread</span>
+                                {% endif %}
+                            </div>
+                            <div style="margin-bottom: 0.75rem; color: #1f2937;">
+                                {{ notification.get_rendered_message() }}
+                            </div>
+                            {% set rendered_link = notification.get_rendered_link() %}
+                            {% if rendered_link %}
+                                <a href="{{ rendered_link }}" class="btn btn-sm btn-primary" style="text-decoration: none; display: inline-block;">View</a>
+                            {% endif %}
+                        </div>
+                        {% if not notification.is_read %}
+                        <form method="POST" action="{{ url_for('notifications.mark_read', notification_id=notification.id) }}" style="display: inline;">
+                            <button type="submit" class="btn btn-sm btn-secondary" style="white-space: nowrap;">Mark Read</button>
+                        </form>
+                        {% endif %}
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
+    {% else %}
+        <div style="text-align: center; padding: 3rem; color: #6b7280;">
+            <p style="font-size: 1.125rem; margin-bottom: 0.5rem;">No notifications</p>
+            <p>You're all caught up!</p>
+        </div>
+    {% endif %}
+</div>
+
+<script>
+// Auto-mark as read when clicking "View" link
+document.addEventListener('DOMContentLoaded', function() {
+    const viewLinks = document.querySelectorAll('.notification-item .btn-primary');
+    viewLinks.forEach(link => {
+        link.addEventListener('click', function(e) {
+            const notificationItem = this.closest('.notification-item');
+            if (notificationItem && notificationItem.classList.contains('unread')) {
+                const markReadForm = notificationItem.querySelector('form[action*="mark-read"]');
+                if (markReadForm) {
+                    // Mark as read via AJAX
+                    fetch(markReadForm.action, {
+                        method: 'POST',
+                        headers: {
+                            'X-Requested-With': 'XMLHttpRequest'
+                        }
+                    }).then(() => {
+                        notificationItem.classList.remove('unread');
+                        notificationItem.style.backgroundColor = '#ffffff';
+                        notificationItem.style.borderLeftColor = '#9ca3af';
+                        const unreadBadge = notificationItem.querySelector('span[style*="background-color: #f59e0b"]');
+                        if (unreadBadge) {
+                            unreadBadge.remove();
+                        }
+                        const markReadBtn = notificationItem.querySelector('button[type="submit"]');
+                        if (markReadBtn) {
+                            markReadBtn.remove();
+                        }
+                    });
+                }
+            }
+        });
+    });
+});
+</script>
+{% endblock %}
+

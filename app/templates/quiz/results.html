@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+
+{% block title %}Quiz Results - Feature Requestor{% endblock %}
+
+{% block content %}
+<div class="quiz-results">
+    <h1>Quiz Results</h1>
+    
+    {% if all_correct %}
+        <div class="success-message">
+            <h2>Congratulations!</h2>
+            <p>You answered all questions correctly. Your sign-up request has been submitted for admin approval.</p>
+        </div>
+    {% else %}
+        <div class="error-message">
+            <h2>Not All Correct</h2>
+            <p>Please review the correct answers below and try again.</p>
+        </div>
+        
+        {% for question in questions %}
+            <div class="question-result">
+                <h3>Question {{ loop.index }}: {{ question.question }}</h3>
+                {% set user_answer = answers.get(question.id) %}
+                {% set is_correct = user_answer == question.correct %}
+                
+                <div class="answer {% if is_correct %}correct{% else %}incorrect{% endif %}">
+                    <p><strong>Your answer:</strong> {{ question.options[user_answer] if user_answer is not none else 'Not answered' }}</p>
+                    {% if not is_correct %}
+                        <p><strong>Correct answer:</strong> {{ question.options[question.correct] }}</p>
+                    {% endif %}
+                    <p><strong>Explanation:</strong> {{ question.explanation }}</p>
+                </div>
+            </div>
+        {% endfor %}
+        
+        <a href="{{ url_for('quiz.take_quiz', signup_request_id=signup_request_id) }}" class="btn btn-primary">Try Again</a>
+    {% endif %}
+</div>
+{% endblock %}
+

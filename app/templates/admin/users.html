@@ -1,0 +1,277 @@
+{% extends "base.html" %}
+
+{% block title %}User Management - Admin{% endblock %}
+
+{% block content %}
+<div class="admin-users">
+    <h1>User Management</h1>
+    
+    <section class="signup-requests">
+        <h2>Pending Signup Requests</h2>
+        {% if signup_requests %}
+            <div class="table-container">
+                <table class="admin-table">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Username</th>
+                            <th>Email</th>
+                            <th>Role</th>
+                            <th>Email Verified</th>
+                            <th>Created</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for request in signup_requests %}
+                            <tr>
+                                <td>{{ request.name }}</td>
+                                <td>{{ request.username }}</td>
+                                <td>{{ request.email }}</td>
+                                <td>{{ request.requested_role }}</td>
+                                <td>{{ 'Yes' if request.email_verified else 'No' }}</td>
+                                <td>{{ request.created_at }}</td>
+                                <td>
+                                    <form method="POST" action="{{ url_for('admin.approve_user', user_id=request.id) }}" style="display:inline;">
+                                        <button type="submit" class="btn btn-success">Approve</button>
+                                    </form>
+                                    <form method="POST" action="{{ url_for('admin.deny_user', user_id=request.id) }}" style="display:inline;">
+                                        <button type="submit" class="btn btn-danger">Deny</button>
+                                    </form>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <p>No pending signup requests.</p>
+        {% endif %}
+    </section>
+    
+    <section class="role-change-requests">
+        <h2>Pending Role Change Requests</h2>
+        {% if role_change_requests %}
+            <div class="table-container">
+                <table class="admin-table">
+                    <thead>
+                        <tr>
+                            <th>User</th>
+                            <th>Username</th>
+                            <th>Email</th>
+                            <th>Current Role</th>
+                            <th>Requested Role</th>
+                            <th>Requested</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for request in role_change_requests %}
+                            <tr>
+                                <td>{{ request.user.name }}</td>
+                                <td>{{ request.user.username }}</td>
+                                <td>{{ request.user.email }}</td>
+                                <td>{{ request.user.role }}</td>
+                                <td>{{ request.requested_role }}</td>
+                                <td>{{ request.created_at }}</td>
+                                <td>
+                                    <form method="POST" action="{{ url_for('admin.approve_role_change', request_id=request.id) }}" style="display:inline;">
+                                        <button type="submit" class="btn btn-success" onclick="return confirm('Are you sure you want to approve this role change? {{ request.user.username }} will be upgraded to {{ request.requested_role }}.')">Approve</button>
+                                    </form>
+                                    <form method="POST" action="{{ url_for('admin.deny_role_change', request_id=request.id) }}" style="display:inline;">
+                                        <button type="submit" class="btn btn-danger" onclick="return confirm('Are you sure you want to deny this role change request?')">Deny</button>
+                                    </form>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <p>No pending role change requests.</p>
+        {% endif %}
+    </section>
+    
+    <section class="users-list">
+        <h2>All Users</h2>
+        
+        <!-- Search Form -->
+        <div class="users-search">
+            <form method="GET" action="{{ url_for('admin.users') }}" class="search-form">
+                <div class="search-controls">
+                    <select name="search_column" id="search_column" class="search-column-select">
+                        <option value="">Select Column</option>
+                        <option value="id" {% if search_column == 'id' %}selected{% endif %}>ID</option>
+                        <option value="name" {% if search_column == 'name' %}selected{% endif %}>Name</option>
+                        <option value="username" {% if search_column == 'username' %}selected{% endif %}>Username</option>
+                        <option value="email" {% if search_column == 'email' %}selected{% endif %}>Email</option>
+                        <option value="role" {% if search_column == 'role' %}selected{% endif %}>Role</option>
+                        <option value="email_verified" {% if search_column == 'email_verified' %}selected{% endif %}>Email Verified</option>
+                    </select>
+                    <input type="text" name="search_value" id="search_value" class="search-input" 
+                           placeholder="Enter search value..." value="{{ search_value }}">
+                    <input type="hidden" name="sort_column" value="{{ sort_column }}">
+                    <input type="hidden" name="sort_order" value="{{ sort_order }}">
+                    <button type="submit" class="btn btn-primary">Search</button>
+                    {% if search_column or search_value %}
+                    <a href="{{ url_for('admin.users', sort_column=sort_column, sort_order=sort_order) }}" class="btn btn-secondary">Clear</a>
+                    {% endif %}
+                </div>
+            </form>
+        </div>
+        
+        <div class="table-container">
+            <table class="admin-table">
+                <thead>
+                    <tr>
+                        <th>
+                            <div class="sortable-header">
+                                <span>ID</span>
+                                <div class="sort-arrows">
+                                    <a href="{{ url_for('admin.users', page=1, search_column=search_column, search_value=search_value, sort_column='id', sort_order=('desc' if sort_column == 'id' and sort_order == 'asc' else 'asc')) }}" 
+                                       class="sort-arrow sort-up {% if sort_column == 'id' and sort_order == 'asc' %}active{% endif %}" 
+                                       title="Sort ascending">▲</a>
+                                    <a href="{{ url_for('admin.users', page=1, search_column=search_column, search_value=search_value, sort_column='id', sort_order=('asc' if sort_column == 'id' and sort_order == 'desc' else 'desc')) }}" 
+                                       class="sort-arrow sort-down {% if sort_column == 'id' and sort_order == 'desc' %}active{% endif %}" 
+                                       title="Sort descending">▼</a>
+                                </div>
+                            </div>
+                        </th>
+                        <th>
+                            <div class="sortable-header">
+                                <span>Name</span>
+                                <div class="sort-arrows">
+                                    <a href="{{ url_for('admin.users', page=1, search_column=search_column, search_value=search_value, sort_column='name', sort_order=('desc' if sort_column == 'name' and sort_order == 'asc' else 'asc')) }}" 
+                                       class="sort-arrow sort-up {% if sort_column == 'name' and sort_order == 'asc' %}active{% endif %}" 
+                                       title="Sort ascending">▲</a>
+                                    <a href="{{ url_for('admin.users', page=1, search_column=search_column, search_value=search_value, sort_column='name', sort_order=('asc' if sort_column == 'name' and sort_order == 'desc' else 'desc')) }}" 
+                                       class="sort-arrow sort-down {% if sort_column == 'name' and sort_order == 'desc' %}active{% endif %}" 
+                                       title="Sort descending">▼</a>
+                                </div>
+                            </div>
+                        </th>
+                        <th>
+                            <div class="sortable-header">
+                                <span>Username</span>
+                                <div class="sort-arrows">
+                                    <a href="{{ url_for('admin.users', page=1, search_column=search_column, search_value=search_value, sort_column='username', sort_order=('desc' if sort_column == 'username' and sort_order == 'asc' else 'asc')) }}" 
+                                       class="sort-arrow sort-up {% if sort_column == 'username' and sort_order == 'asc' %}active{% endif %}" 
+                                       title="Sort ascending">▲</a>
+                                    <a href="{{ url_for('admin.users', page=1, search_column=search_column, search_value=search_value, sort_column='username', sort_order=('asc' if sort_column == 'username' and sort_order == 'desc' else 'desc')) }}" 
+                                       class="sort-arrow sort-down {% if sort_column == 'username' and sort_order == 'desc' %}active{% endif %}" 
+                                       title="Sort descending">▼</a>
+                                </div>
+                            </div>
+                        </th>
+                        <th>
+                            <div class="sortable-header">
+                                <span>Email</span>
+                                <div class="sort-arrows">
+                                    <a href="{{ url_for('admin.users', page=1, search_column=search_column, search_value=search_value, sort_column='email', sort_order=('desc' if sort_column == 'email' and sort_order == 'asc' else 'asc')) }}" 
+                                       class="sort-arrow sort-up {% if sort_column == 'email' and sort_order == 'asc' %}active{% endif %}" 
+                                       title="Sort ascending">▲</a>
+                                    <a href="{{ url_for('admin.users', page=1, search_column=search_column, search_value=search_value, sort_column='email', sort_order=('asc' if sort_column == 'email' and sort_order == 'desc' else 'desc')) }}" 
+                                       class="sort-arrow sort-down {% if sort_column == 'email' and sort_order == 'desc' %}active{% endif %}" 
+                                       title="Sort descending">▼</a>
+                                </div>
+                            </div>
+                        </th>
+                        <th>
+                            <div class="sortable-header">
+                                <span>Role</span>
+                                <div class="sort-arrows">
+                                    <a href="{{ url_for('admin.users', page=1, search_column=search_column, search_value=search_value, sort_column='role', sort_order=('desc' if sort_column == 'role' and sort_order == 'asc' else 'asc')) }}" 
+                                       class="sort-arrow sort-up {% if sort_column == 'role' and sort_order == 'asc' %}active{% endif %}" 
+                                       title="Sort ascending">▲</a>
+                                    <a href="{{ url_for('admin.users', page=1, search_column=search_column, search_value=search_value, sort_column='role', sort_order=('asc' if sort_column == 'role' and sort_order == 'desc' else 'desc')) }}" 
+                                       class="sort-arrow sort-down {% if sort_column == 'role' and sort_order == 'desc' %}active{% endif %}" 
+                                       title="Sort descending">▼</a>
+                                </div>
+                            </div>
+                        </th>
+                        <th>
+                            <div class="sortable-header">
+                                <span>Email Verified</span>
+                                <div class="sort-arrows">
+                                    <a href="{{ url_for('admin.users', page=1, search_column=search_column, search_value=search_value, sort_column='email_verified', sort_order=('desc' if sort_column == 'email_verified' and sort_order == 'asc' else 'asc')) }}" 
+                                       class="sort-arrow sort-up {% if sort_column == 'email_verified' and sort_order == 'asc' %}active{% endif %}" 
+                                       title="Sort ascending">▲</a>
+                                    <a href="{{ url_for('admin.users', page=1, search_column=search_column, search_value=search_value, sort_column='email_verified', sort_order=('asc' if sort_column == 'email_verified' and sort_order == 'desc' else 'desc')) }}" 
+                                       class="sort-arrow sort-down {% if sort_column == 'email_verified' and sort_order == 'desc' %}active{% endif %}" 
+                                       title="Sort descending">▼</a>
+                                </div>
+                            </div>
+                        </th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% if users %}
+                        {% for user in users %}
+                            <tr>
+                                <td>{{ user.id }}</td>
+                                <td>{{ user.name }}</td>
+                                <td>{{ user.username }}</td>
+                                <td>{{ user.email }}</td>
+                                <td>{{ user.role }}</td>
+                                <td>{{ 'Yes' if user.email_verified else 'No' }}</td>
+                                <td>
+                                    <form method="POST" action="{{ url_for('admin.reset_user_password', user_id=user.id) }}" style="display:inline;">
+                                        <button type="submit" class="btn btn-warning" onclick="return confirm('Send password reset email to {{ user.email }}?');">Reset Password</button>
+                                    </form>
+                                    <form method="POST" action="{{ url_for('admin.view_as_user', user_id=user.id) }}" style="display:inline; margin-left: 0.5rem;">
+                                        <button type="submit" class="btn btn-info" onclick="return confirm('View this page as {{ user.name }}? Sensitive information will be masked.');">View As</button>
+                                    </form>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    {% else %}
+                        <tr>
+                            <td colspan="7" style="text-align: center; padding: 2rem;">
+                                {% if search_column or search_value %}
+                                    No users found matching your search criteria.
+                                {% else %}
+                                    No users found.
+                                {% endif %}
+                            </td>
+                        </tr>
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+        
+        <!-- Pagination Controls -->
+        {% if pagination and pagination.pages > 1 %}
+        <div class="pagination-container">
+            <div class="pagination-info">
+                Showing {{ (pagination.page - 1) * pagination.per_page + 1 }} to 
+                {{ pagination.page * pagination.per_page if pagination.page * pagination.per_page <= pagination.total else pagination.total }} 
+                of {{ pagination.total }} users
+            </div>
+            <div class="pagination-controls">
+                {% if pagination.has_prev %}
+                    <a href="{{ url_for('admin.users', page=pagination.prev_num, search_column=search_column, search_value=search_value, sort_column=sort_column, sort_order=sort_order) }}" 
+                       class="pagination-btn pagination-prev" title="Previous Page">
+                        ←
+                    </a>
+                {% else %}
+                    <span class="pagination-btn pagination-prev disabled" title="Previous Page">←</span>
+                {% endif %}
+                
+                <span class="pagination-page-info">Page {{ pagination.page }} of {{ pagination.pages }}</span>
+                
+                {% if pagination.has_next %}
+                    <a href="{{ url_for('admin.users', page=pagination.next_num, search_column=search_column, search_value=search_value, sort_column=sort_column, sort_order=sort_order) }}" 
+                       class="pagination-btn pagination-next" title="Next Page">
+                        →
+                    </a>
+                {% else %}
+                    <span class="pagination-btn pagination-next disabled" title="Next Page">→</span>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+    </section>
+</div>
+{% endblock %}
+

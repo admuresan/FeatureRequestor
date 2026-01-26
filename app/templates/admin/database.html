@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+
+{% block title %}Database Management - Admin{% endblock %}
+
+{% block content %}
+<div class="admin-database">
+    <h1>Database Management</h1>
+    
+    <div class="database-actions">
+        <div class="action-section">
+            <h2>Create Backup</h2>
+            <form method="POST" action="{{ url_for('admin.backup_database') }}">
+                <button type="submit" class="btn btn-primary">Create Backup and Download</button>
+            </form>
+            <p>Database backups are stored in instance/data/</p>
+        </div>
+        
+        <div class="action-section">
+            <h2>Restore from Backup</h2>
+            <form method="POST" action="{{ url_for('admin.restore_database') }}" enctype="multipart/form-data">
+                <div class="form-group">
+                    <label for="backup_file">Select backup file (.db):</label>
+                    <input type="file" id="backup_file" name="backup_file" accept=".db" required>
+                </div>
+                <button type="submit" class="btn btn-warning" onclick="return confirm('Are you sure you want to restore the database? This will replace the current database. A backup of the current database will be created first.')">Restore Database</button>
+            </form>
+            <p><strong>Warning:</strong> Restoring will replace the current database. A backup of the current database will be created automatically before restore.</p>
+        </div>
+        
+        <div class="action-section">
+            <h2>Fix Database</h2>
+            <p>Run database initialization to apply migrations and fix schema issues. This will add any missing columns and update the database structure.</p>
+            <form method="POST" action="{{ url_for('admin.fix_database') }}">
+                <button type="submit" class="btn btn-info" onclick="return confirm('This will run database migrations and fix schema issues. Continue?')">Fix Database</button>
+            </form>
+            <p style="margin-top: 10px;"><strong>Note:</strong> This is safe to run multiple times. It will only add missing columns and won't delete any data.</p>
+        </div>
+        
+        <div class="action-section">
+            <h2>Test Data Management</h2>
+            <p>Generate comprehensive test data for development and testing, including test users, apps, feature requests, comments, payments, messages, and notifications.</p>
+            
+            <div style="margin-bottom: 20px;">
+                <form method="POST" action="{{ url_for('admin.generate_test_data') }}" style="display: inline-block; margin-right: 10px;">
+                    <button type="submit" class="btn btn-primary" onclick="return confirm('This will generate test data including users, apps, requests, comments, payments, and messages. Continue?')">Generate Test Data</button>
+                </form>
+                
+                <form method="POST" action="{{ url_for('admin.clear_test_data') }}" style="display: inline-block;">
+                    <button type="submit" class="btn btn-danger" onclick="return confirm('This will delete ALL test data (test users, test apps, and all related data). Previously existing data will NOT be deleted. Continue?')">Clear Test Data</button>
+                </form>
+            </div>
+            
+            <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin-top: 15px;">
+                <h3 style="margin-top: 0;">What gets generated:</h3>
+                <ul style="margin-bottom: 0;">
+                    <li><strong>Test Users:</strong> Multiple requesters and developers with test accounts</li>
+                    <li><strong>Test Apps:</strong> Several test applications</li>
+                    <li><strong>Feature Requests:</strong> Requests in various statuses (requested, in progress, completed, confirmed, cancelled)</li>
+                    <li><strong>Developer Assignments:</strong> Developers working on requests, some completed, some in progress</li>
+                    <li><strong>Comments:</strong> Comments on requests with bids from developers</li>
+                    <li><strong>Payments:</strong> Payment ratios, transactions, and tips</li>
+                    <li><strong>Messages:</strong> Direct messages and group threads related to requests</li>
+                    <li><strong>Notifications:</strong> Various notifications for users</li>
+                </ul>
+                <p style="margin-top: 10px; margin-bottom: 0;"><strong>Note:</strong> All test users have password "test123" for easy login during development.</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+

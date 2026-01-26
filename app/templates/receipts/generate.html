@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+
+{% block title %}Generate Receipt - Feature Requestor{% endblock %}
+
+{% block content %}
+<div class="receipt-generation">
+    <h1>Generate Receipt</h1>
+    <form method="POST" action="{{ url_for('receipts.generate_receipt') }}">
+        <div class="form-group">
+            <label for="start_date">Start Date:</label>
+            <input type="date" id="start_date" name="start_date" required>
+        </div>
+        <div class="form-group">
+            <label for="end_date">End Date:</label>
+            <input type="date" id="end_date" name="end_date" required>
+        </div>
+        <button type="submit" class="btn btn-primary">Generate Receipt (PDF)</button>
+    </form>
+</div>
+{% endblock %}
+

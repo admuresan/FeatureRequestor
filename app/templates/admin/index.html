@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+
+{% block title %}Admin Panel - Feature Requestor{% endblock %}
+
+{% block content %}
+<div class="admin-panel">
+    <h1>Admin Panel</h1>
+    
+    <nav class="admin-nav">
+        <a href="{{ url_for('admin.users') }}" class="admin-nav-item">User Management</a>
+        <a href="{{ url_for('admin.apps') }}" class="admin-nav-item">App Management</a>
+        <a href="{{ url_for('admin.email_config') }}" class="admin-nav-item">Email Configuration</a>
+        <a href="{{ url_for('admin.stripe_config') }}" class="admin-nav-item">Stripe Configuration</a>
+        <a href="{{ url_for('admin.branding') }}" class="admin-nav-item">Branding</a>
+        <a href="{{ url_for('admin.database') }}" class="admin-nav-item">Database</a>
+        <a href="{{ url_for('admin.data_viewer') }}" class="admin-nav-item">Data Viewer</a>
+        <a href="{{ url_for('admin.settings') }}" class="admin-nav-item">Settings</a>
+    </nav>
+</div>
+{% endblock %}
+

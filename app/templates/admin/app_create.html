@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+
+{% block title %}Create App - Admin{% endblock %}
+
+{% block content %}
+<div class="admin-app-create">
+    <h1>Create New App</h1>
+    <form method="POST" action="{{ url_for('admin.create_app') }}">
+        <div class="form-group">
+            <label for="app_name">App Name (URL-safe):</label>
+            <input type="text" id="app_name" name="app_name" required pattern="[a-zA-Z0-9_-]+" title="Only alphanumeric characters, hyphens, and underscores allowed">
+            <small>Only alphanumeric characters, hyphens, and underscores allowed</small>
+        </div>
+        <div class="form-group">
+            <label for="app_display_name">Display Name:</label>
+            <input type="text" id="app_display_name" name="app_display_name" required>
+        </div>
+        <div class="form-group">
+            <label for="app_description">Description:</label>
+            <textarea id="app_description" name="app_description"></textarea>
+        </div>
+        <div class="form-group">
+            <label for="app_url">App URL:</label>
+            <input type="url" id="app_url" name="app_url">
+        </div>
+        <div class="form-group">
+            <label for="github_url">GitHub URL:</label>
+            <input type="url" id="github_url" name="github_url">
+        </div>
+        <button type="submit" class="btn btn-primary">Create App</button>
+        <a href="{{ url_for('admin.apps') }}" class="btn">Cancel</a>
+    </form>
+</div>
+{% endblock %}
+

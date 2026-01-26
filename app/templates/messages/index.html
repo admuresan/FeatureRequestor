@@ -1,0 +1,1064 @@
+{% extends "base.html" %}
+
+{% block title %}Messages - Feature Requestor{% endblock %}
+
+{% block content %}
+<div class="messages-page">
+    <div class="messages-layout">
+        <div class="messages-sidebar">
+            <h2>Conversations</h2>
+            {% if current_user.email_verified %}
+                <a href="#" class="btn-new-message" onclick="openNewMessageForm(); return false;">
+                    <span class="plus-icon">+</span> New Message
+                </a>
+            {% else %}
+                <div class="alert alert-warning" style="margin-bottom: 1rem; padding: 0.75rem; background: #fff3cd; border: 1px solid #ffc107; border-radius: 4px;">
+                    <p style="margin: 0; font-size: 0.9rem;">Please verify your email address to send messages.</p>
+                    <p style="margin: 0.5rem 0 0 0; font-size: 0.85rem;"><a href="{{ url_for('account.settings') }}">Go to account settings</a></p>
+                </div>
+            {% endif %}
+            
+            <div id="new-message-form" style="display:none; margin-top: 1rem; padding: 1rem; background: #f5f5f5; border-radius: 4px;">
+                <form method="POST" action="{{ url_for('messages.create_thread') }}" id="new-message-form-element">
+                    <div class="form-group">
+                        <label>Recipients:</label>
+                        <div class="recipients-autocomplete">
+                            <div class="recipients-tags" id="recipients-tags"></div>
+                            <input type="text" 
+                                   id="recipients-input" 
+                                   class="recipients-input" 
+                                   placeholder="Type username to search..."
+                                   autocomplete="off">
+                            <div class="autocomplete-suggestions" id="autocomplete-suggestions"></div>
+                        </div>
+                        <div id="recipient-ids-container"></div>
+                    </div>
+                    <div class="form-group">
+                        <label>Message:</label>
+                        <textarea name="message" required style="width: 100%; min-height: 80px;"></textarea>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Send</button>
+                    <button type="button" class="btn" onclick="closeNewMessageForm();">Cancel</button>
+                </form>
+            </div>
+            
+            <div class="threads-list">
+                {% for thread in threads %}
+                    {% set unread_count = 0 %}
+                    {% set thread_messages = thread._messages_list %}
+                    {% set thread_participants = thread._participants_list %}
+                    {% set last_message = thread_messages|last if thread_messages else None %}
+                    <a href="{{ url_for('messages.index', thread_id=thread.id) }}" 
+                       class="thread-item {% if current_thread and current_thread.id == thread.id %}active{% endif %}">
+                        <div class="thread-header">
+                            <strong>
+                                {% if thread.thread_type == 'direct' %}
+                                    {% for participant in thread_participants %}
+                                        {% if participant.user_id != current_user.id %}
+                                            {{ participant.user.username }}
+                                        {% endif %}
+                                    {% endfor %}
+                                {% else %}
+                                    Group Chat ({{ thread_participants|length }})
+                                {% endif %}
+                            </strong>
+                            {% if unread_count > 0 %}
+                                <span class="unread-badge">{{ unread_count }}</span>
+                            {% endif %}
+                        </div>
+                        {% if last_message %}
+                            <div class="thread-preview">{{ last_message.message[:50] }}{% if last_message.message|length > 50 %}...{% endif %}</div>
+                        {% endif %}
+                    </a>
+                {% else %}
+                    <p>No conversations yet.</p>
+                {% endfor %}
+            </div>
+        </div>
+        
+        <div class="messages-content">
+            {% if current_thread %}
+                <div class="messages-header">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <h2 style="margin: 0;">
+                            {% if current_thread.thread_type == 'direct' %}
+                                {% set current_participants = current_thread._participants_list %}
+                                {% for participant in current_participants %}
+                                    {% if participant.user_id != current_user.id %}
+                                        {{ participant.user.username }}
+                                    {% endif %}
+                                {% endfor %}
+                            {% else %}
+                                Group Chat
+                            {% endif %}
+                        </h2>
+                        <button class="btn btn-secondary" onclick="toggleParticipantsMenu(); return false;" style="padding: 0.5rem 1rem;">
+                            Participants
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- Participants Menu -->
+                <div id="participants-menu" class="participants-menu" style="display: none;">
+                    <div class="participants-menu-header">
+                        <h3>Participants</h3>
+                        <button onclick="toggleParticipantsMenu(); return false;" style="background: none; border: none; font-size: 1.5rem; cursor: pointer; color: #666;">&times;</button>
+                    </div>
+                    <div class="participants-list" id="participants-list">
+                        {% set current_participants = current_thread._participants_list %}
+                        {% for participant in current_participants %}
+                            <div class="participant-item" 
+                                 data-user-id="{{ participant.user_id }}"
+                                 data-username="{{ participant.user.username }}"
+                                 oncontextmenu="showParticipantContextMenu(event, {{ participant.user_id }}, '{{ participant.user.username|e }}'); return false;">
+                                <span>{{ participant.user.username }}</span>
+                                {% if participant.user_id == current_user.id %}
+                                    <span style="color: #666; font-size: 0.9rem;">(You)</span>
+                                {% endif %}
+                            </div>
+                        {% endfor %}
+                    </div>
+                    {% set current_participants = current_thread._participants_list %}
+                    {% if current_thread.thread_type == 'group' or current_participants|length >= 2 %}
+                        <div class="participants-menu-footer">
+                            <a href="#" class="add-participant-link" onclick="openAddParticipantForm(); return false;">
+                                <span class="plus-icon">+</span> Add Participant
+                            </a>
+                        </div>
+                        <div id="add-participant-form" style="display: none; padding: 1rem; border-top: 1px solid #ddd;">
+                            <form method="POST" action="{{ url_for('messages.add_user_to_thread', thread_id=current_thread.id) }}" id="add-participant-form-element">
+                                <div class="form-group">
+                                    <label>Add User:</label>
+                                    <div class="participant-autocomplete">
+                                        <div class="participant-tags" id="participant-tags"></div>
+                                        <input type="text" 
+                                               id="participant-input" 
+                                               class="participant-input" 
+                                               placeholder="Type username to search..."
+                                               autocomplete="off">
+                                        <div class="autocomplete-suggestions" id="participant-autocomplete-suggestions"></div>
+                                    </div>
+                                    <div id="participant-id-container"></div>
+                                </div>
+                                <button type="submit" class="btn btn-primary">Add</button>
+                                <button type="button" class="btn" onclick="closeAddParticipantForm();">Cancel</button>
+                            </form>
+                        </div>
+                    {% endif %}
+                </div>
+                
+                <!-- Participant Context Menu -->
+                <div id="participant-context-menu" class="participant-context-menu" onclick="event.stopPropagation();">
+                    <div class="participant-context-menu-item" onclick="messageParticipant(); event.stopPropagation();">Message</div>
+                </div>
+                
+                <div class="messages-list">
+                    {% for message in messages %}
+                        <div class="message {% if message.sender_id == current_user.id %}message-sent{% else %}message-received{% endif %}">
+                            <div class="message-header">
+                                <strong>{{ message.sender.username }}</strong>
+                                <span class="message-time">{{ message.created_at }}</span>
+                            </div>
+                            <div class="message-body">
+                                {{ message.message }}
+                            </div>
+                            {% if message.is_poll %}
+                                <div class="poll-section">
+                                    <p>Poll: {{ message.poll_type }}</p>
+                                    {% if message.poll_type == 'add_user' %}
+                                        <form method="POST" action="{{ url_for('messages.vote_on_poll', message_id=message.id) }}" style="display:inline;">
+                                            <button type="submit" name="vote" value="approve" class="btn btn-sm btn-success">Approve</button>
+                                            <button type="submit" name="vote" value="reject" class="btn btn-sm btn-danger">Reject</button>
+                                        </form>
+                                    {% endif %}
+                                </div>
+                            {% endif %}
+                        </div>
+                    {% endfor %}
+                </div>
+                
+                <div class="message-input">
+                    {% if current_user.email_verified %}
+                        <form method="POST" action="{{ url_for('messages.send_message', thread_id=current_thread.id) }}">
+                            <textarea name="message" required style="width: 100%; min-height: 60px;"></textarea>
+                            <button type="submit" class="btn btn-primary">Send</button>
+                        </form>
+                    {% else %}
+                        <div class="alert alert-warning" style="padding: 0.75rem; background: #fff3cd; border: 1px solid #ffc107; border-radius: 4px;">
+                            <p style="margin: 0; font-size: 0.9rem;">Please verify your email address to send messages.</p>
+                            <p style="margin: 0.5rem 0 0 0; font-size: 0.85rem;"><a href="{{ url_for('account.settings') }}">Go to account settings</a></p>
+                        </div>
+                    {% endif %}
+                </div>
+            {% else %}
+                <div class="no-thread-selected">
+                    <p>Select a conversation from the sidebar or create a new message.</p>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<style>
+.messages-layout {
+    display: flex;
+    height: calc(100vh - 200px);
+    gap: 1rem;
+}
+
+.messages-sidebar {
+    width: 300px;
+    border-right: 1px solid #ddd;
+    padding: 1rem;
+    overflow-y: auto;
+}
+
+.messages-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    padding: 1rem;
+    position: relative;
+}
+
+.messages-header {
+    border-bottom: 1px solid #ddd;
+    padding-bottom: 1rem;
+    margin-bottom: 1rem;
+}
+
+.messages-list {
+    flex: 1;
+    overflow-y: auto;
+    margin-bottom: 1rem;
+}
+
+.message {
+    margin-bottom: 1rem;
+    padding: 0.75rem;
+    border-radius: 4px;
+}
+
+.message-sent {
+    background-color: #e3f2fd;
+    margin-left: 20%;
+}
+
+.message-received {
+    background-color: #f5f5f5;
+    margin-right: 20%;
+}
+
+.message-header {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 0.5rem;
+    font-size: 0.9rem;
+}
+
+.message-time {
+    color: #666;
+}
+
+.thread-item {
+    display: block;
+    padding: 0.75rem;
+    border-bottom: 1px solid #eee;
+    text-decoration: none;
+    color: #333;
+}
+
+.thread-item:hover {
+    background-color: #f5f5f5;
+}
+
+.thread-item.active {
+    background-color: #e3f2fd;
+}
+
+.thread-header {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 0.25rem;
+}
+
+.unread-badge {
+    background-color: #dc3545;
+    color: white;
+    border-radius: 50%;
+    padding: 0.25rem 0.5rem;
+    font-size: 0.8rem;
+}
+
+.message-input {
+    border-top: 1px solid #ddd;
+    padding-top: 1rem;
+}
+
+.btn-new-message {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    background: linear-gradient(135deg, #10b981, #059669);
+    color: white;
+    padding: 0.75rem 1.5rem;
+    border-radius: 8px;
+    text-decoration: none;
+    font-weight: 500;
+    transition: all 0.3s ease;
+    border: none;
+    cursor: pointer;
+    box-shadow: 0 2px 4px rgba(16, 185, 129, 0.3);
+}
+
+.btn-new-message:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(16, 185, 129, 0.4);
+    background: linear-gradient(135deg, #059669, #047857);
+}
+
+.plus-icon {
+    font-size: 1.5rem;
+    font-weight: bold;
+    line-height: 1;
+}
+
+.recipients-autocomplete {
+    position: relative;
+    width: 100%;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    background: white;
+    min-height: 40px;
+    padding: 4px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px;
+}
+
+.recipients-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    flex: 1;
+}
+
+.recipient-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: #e3f2fd;
+    color: #1976d2;
+    padding: 4px 8px;
+    border-radius: 16px;
+    font-size: 0.9rem;
+    max-width: 200px;
+}
+
+.recipient-tag-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.recipient-tag-remove {
+    cursor: pointer;
+    font-weight: bold;
+    color: #1976d2;
+    padding: 0 2px;
+    line-height: 1;
+    font-size: 1.2rem;
+}
+
+.recipient-tag-remove:hover {
+    color: #d32f2f;
+}
+
+.recipients-input {
+    flex: 1;
+    min-width: 150px;
+    border: none;
+    outline: none;
+    padding: 6px 8px;
+    font-size: 0.9rem;
+    background: transparent;
+}
+
+.autocomplete-suggestions {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: white;
+    border: 1px solid #ddd;
+    border-top: none;
+    border-radius: 0 0 4px 4px;
+    max-height: 200px;
+    overflow-y: auto;
+    z-index: 1000;
+    display: none;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+}
+
+.autocomplete-suggestion {
+    padding: 10px 12px;
+    cursor: pointer;
+    border-bottom: 1px solid #f0f0f0;
+    display: flex;
+    flex-direction: column;
+}
+
+.autocomplete-suggestion:hover,
+.autocomplete-suggestion.highlighted {
+    background: #f5f5f5;
+}
+
+.autocomplete-suggestion-username {
+    font-weight: 500;
+    color: #333;
+}
+
+.autocomplete-suggestion-email {
+    font-size: 0.85rem;
+    color: #666;
+    margin-top: 2px;
+}
+
+.autocomplete-suggestion:last-child {
+    border-bottom: none;
+}
+
+.participants-menu {
+    position: absolute;
+    top: 60px;
+    right: 1rem;
+    width: 300px;
+    background: white;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    z-index: 1000;
+    max-height: calc(100vh - 200px);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.participants-menu-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem;
+    border-bottom: 1px solid #ddd;
+}
+
+.participants-menu-header h3 {
+    margin: 0;
+    font-size: 1.1rem;
+}
+
+.participants-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 0.5rem 0;
+}
+
+.participants-menu-footer {
+    padding: 1rem;
+    border-top: 1px solid #ddd;
+}
+
+.add-participant-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: #333;
+    text-decoration: none;
+    cursor: pointer;
+    font-size: 0.95rem;
+    padding: 0.25rem 0;
+}
+
+.add-participant-link:hover {
+    color: #1976d2;
+    text-decoration: underline;
+}
+
+.add-participant-link .plus-icon {
+    font-size: 1.2rem;
+    font-weight: bold;
+    line-height: 1;
+}
+
+.participant-item {
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid #f0f0f0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: context-menu;
+    user-select: none;
+}
+
+.participant-item:last-child {
+    border-bottom: none;
+}
+
+.participant-item:hover {
+    background-color: #f5f5f5;
+}
+
+.participant-context-menu {
+    position: fixed;
+    background: white;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    z-index: 10000;
+    min-width: 150px;
+    padding: 0.25rem 0;
+    display: none;
+}
+
+.participant-context-menu-item {
+    padding: 0.5rem 1rem;
+    cursor: pointer;
+    color: #333;
+    font-size: 0.9rem;
+}
+
+.participant-context-menu-item:hover {
+    background-color: #f5f5f5;
+}
+
+.participant-autocomplete {
+    position: relative;
+    width: 100%;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    background: white;
+    min-height: 40px;
+    padding: 4px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px;
+}
+
+.participant-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    flex: 1;
+}
+
+.participant-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: #e3f2fd;
+    color: #1976d2;
+    padding: 4px 8px;
+    border-radius: 16px;
+    font-size: 0.9rem;
+    max-width: 200px;
+}
+
+.participant-tag-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.participant-tag-remove {
+    cursor: pointer;
+    font-weight: bold;
+    color: #1976d2;
+    padding: 0 2px;
+    line-height: 1;
+    font-size: 1.2rem;
+}
+
+.participant-tag-remove:hover {
+    color: #d32f2f;
+}
+
+.participant-input {
+    flex: 1;
+    min-width: 150px;
+    border: none;
+    outline: none;
+    padding: 6px 8px;
+    font-size: 0.9rem;
+    background: transparent;
+}
+</style>
+
+<script>
+// User data from server
+const allUsers = [
+    {% for user in all_users %}
+    {id: {{ user.id }}, username: "{{ user.username|e }}", email: "{{ user.email|e }}"}{% if not loop.last %},{% endif %}
+    {% endfor %}
+];
+
+// State
+let selectedUsers = [];
+let currentSuggestions = [];
+let highlightedIndex = -1;
+
+// DOM elements
+const recipientsInput = document.getElementById('recipients-input');
+const recipientsTags = document.getElementById('recipients-tags');
+const autocompleteSuggestions = document.getElementById('autocomplete-suggestions');
+const recipientIdsContainer = document.getElementById('recipient-ids-container');
+const form = document.getElementById('new-message-form-element');
+
+// Initialize
+if (recipientsInput) {
+    recipientsInput.addEventListener('input', handleInput);
+    recipientsInput.addEventListener('keydown', handleKeyDown);
+    recipientsInput.addEventListener('blur', () => {
+        // Delay hiding suggestions to allow clicks
+        setTimeout(() => {
+            autocompleteSuggestions.style.display = 'none';
+        }, 200);
+    });
+    
+    form.addEventListener('submit', handleFormSubmit);
+}
+
+function handleInput(e) {
+    const query = e.target.value.trim().toLowerCase();
+    
+    if (query === '') {
+        autocompleteSuggestions.style.display = 'none';
+        return;
+    }
+    
+    // Filter users that match and aren't already selected
+    const selectedIds = selectedUsers.map(u => u.id);
+    currentSuggestions = allUsers.filter(user => 
+        !selectedIds.includes(user.id) &&
+        user.username.toLowerCase().includes(query)
+    ).slice(0, 10); // Limit to 10 suggestions
+    
+    if (currentSuggestions.length > 0) {
+        displaySuggestions();
+    } else {
+        autocompleteSuggestions.style.display = 'none';
+    }
+}
+
+function displaySuggestions() {
+    autocompleteSuggestions.innerHTML = '';
+    highlightedIndex = -1;
+    
+    currentSuggestions.forEach((user, index) => {
+        const suggestion = document.createElement('div');
+        suggestion.className = 'autocomplete-suggestion';
+        suggestion.dataset.index = index;
+        suggestion.innerHTML = `
+            <span class="autocomplete-suggestion-username">${escapeHtml(user.username)}</span>
+        `;
+        suggestion.addEventListener('click', () => selectUser(user));
+        autocompleteSuggestions.appendChild(suggestion);
+    });
+    
+    autocompleteSuggestions.style.display = 'block';
+}
+
+function handleKeyDown(e) {
+    if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        highlightedIndex = Math.min(highlightedIndex + 1, currentSuggestions.length - 1);
+        updateHighlight();
+    } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        highlightedIndex = Math.max(highlightedIndex - 1, -1);
+        updateHighlight();
+    } else if (e.key === 'Enter' && highlightedIndex >= 0) {
+        e.preventDefault();
+        selectUser(currentSuggestions[highlightedIndex]);
+    } else if (e.key === 'Backspace' && recipientsInput.value === '' && selectedUsers.length > 0) {
+        // Remove last selected user if input is empty
+        removeUser(selectedUsers[selectedUsers.length - 1].id);
+    }
+}
+
+function updateHighlight() {
+    const suggestions = autocompleteSuggestions.querySelectorAll('.autocomplete-suggestion');
+    suggestions.forEach((suggestion, index) => {
+        if (index === highlightedIndex) {
+            suggestion.classList.add('highlighted');
+            suggestion.scrollIntoView({ block: 'nearest' });
+        } else {
+            suggestion.classList.remove('highlighted');
+        }
+    });
+}
+
+function selectUser(user) {
+    if (selectedUsers.find(u => u.id === user.id)) {
+        return; // Already selected
+    }
+    
+    selectedUsers.push(user);
+    recipientsInput.value = '';
+    autocompleteSuggestions.style.display = 'none';
+    updateTags();
+    updateHiddenInputs();
+    recipientsInput.focus();
+}
+
+function removeUser(userId) {
+    selectedUsers = selectedUsers.filter(u => u.id !== userId);
+    updateTags();
+    updateHiddenInputs();
+}
+
+function updateTags() {
+    recipientsTags.innerHTML = '';
+    selectedUsers.forEach(user => {
+        const tag = document.createElement('div');
+        tag.className = 'recipient-tag';
+        tag.innerHTML = `
+            <span class="recipient-tag-name">${escapeHtml(user.username)}</span>
+            <span class="recipient-tag-remove" onclick="removeUser(${user.id})" title="Remove">×</span>
+        `;
+        recipientsTags.appendChild(tag);
+    });
+}
+
+function updateHiddenInputs() {
+    recipientIdsContainer.innerHTML = '';
+    selectedUsers.forEach(user => {
+        const input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = 'recipient_ids';
+        input.value = user.id;
+        recipientIdsContainer.appendChild(input);
+    });
+}
+
+function handleFormSubmit(e) {
+    if (selectedUsers.length === 0) {
+        e.preventDefault();
+        alert('Please select at least one recipient.');
+        recipientsInput.focus();
+        return false;
+    }
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+// Make removeUser available globally for onclick handlers
+window.removeUser = removeUser;
+
+// Function to open new message form
+function openNewMessageForm() {
+    const form = document.getElementById('new-message-form');
+    if (form) {
+        form.style.display = 'block';
+        // Reset form if it was previously used
+        if (selectedUsers.length > 0) {
+            selectedUsers = [];
+            updateTags();
+            updateHiddenInputs();
+        }
+        recipientsInput.value = '';
+        recipientsInput.focus();
+    }
+}
+
+// Function to close new message form
+function closeNewMessageForm() {
+    const form = document.getElementById('new-message-form');
+    if (form) {
+        form.style.display = 'none';
+        // Reset form
+        selectedUsers = [];
+        updateTags();
+        updateHiddenInputs();
+        recipientsInput.value = '';
+        autocompleteSuggestions.style.display = 'none';
+        form.querySelector('textarea[name="message"]').value = '';
+    }
+}
+
+// Auto-open form and pre-select user if target_user is provided
+{% if target_user %}
+document.addEventListener('DOMContentLoaded', function() {
+    const form = document.getElementById('new-message-form');
+    if (form) {
+        form.style.display = 'block';
+        const targetUser = allUsers.find(u => u.id === {{ target_user.id }});
+        if (targetUser) {
+            selectUser(targetUser);
+        }
+        recipientsInput.focus();
+    }
+});
+{% endif %}
+
+// Participants menu functionality
+function toggleParticipantsMenu() {
+    const menu = document.getElementById('participants-menu');
+    if (menu) {
+        const isVisible = menu.style.display !== 'none';
+        menu.style.display = isVisible ? 'none' : 'flex';
+    }
+}
+
+// Close participants menu when clicking outside
+document.addEventListener('click', function(event) {
+    const menu = document.getElementById('participants-menu');
+    const participantsButton = event.target.closest('button[onclick*="toggleParticipantsMenu"]');
+    
+    if (menu && menu.style.display !== 'none') {
+        if (!menu.contains(event.target) && !participantsButton) {
+            menu.style.display = 'none';
+        }
+    }
+});
+
+// Add participant functionality
+let selectedParticipant = null;
+let currentParticipantSuggestions = [];
+let highlightedParticipantIndex = -1;
+
+const participantInput = document.getElementById('participant-input');
+const participantTags = document.getElementById('participant-tags');
+const participantAutocompleteSuggestions = document.getElementById('participant-autocomplete-suggestions');
+const participantIdContainer = document.getElementById('participant-id-container');
+const addParticipantForm = document.getElementById('add-participant-form-element');
+
+if (participantInput) {
+    participantInput.addEventListener('input', handleParticipantInput);
+    participantInput.addEventListener('keydown', handleParticipantKeyDown);
+    participantInput.addEventListener('blur', () => {
+        setTimeout(() => {
+            participantAutocompleteSuggestions.style.display = 'none';
+        }, 200);
+    });
+    
+    if (addParticipantForm) {
+        addParticipantForm.addEventListener('submit', handleParticipantFormSubmit);
+    }
+}
+
+function handleParticipantInput(e) {
+    const query = e.target.value.trim().toLowerCase();
+    
+    if (query === '') {
+        participantAutocompleteSuggestions.style.display = 'none';
+        return;
+    }
+    
+    // Get current thread participants
+    {% if current_thread %}
+    const currentParticipantIds = [
+        {% for participant in current_thread._participants_list %}
+        {{ participant.user_id }}{% if not loop.last %},{% endif %}
+        {% endfor %}
+    ];
+    {% else %}
+    const currentParticipantIds = [];
+    {% endif %}
+    
+    // Filter users that match and aren't already in the thread
+    currentParticipantSuggestions = allUsers.filter(user => 
+        !currentParticipantIds.includes(user.id) &&
+        user.username.toLowerCase().includes(query)
+    ).slice(0, 10);
+    
+    if (currentParticipantSuggestions.length > 0) {
+        displayParticipantSuggestions();
+    } else {
+        participantAutocompleteSuggestions.style.display = 'none';
+    }
+}
+
+function displayParticipantSuggestions() {
+    participantAutocompleteSuggestions.innerHTML = '';
+    highlightedParticipantIndex = -1;
+    
+    currentParticipantSuggestions.forEach((user, index) => {
+        const suggestion = document.createElement('div');
+        suggestion.className = 'autocomplete-suggestion';
+        suggestion.dataset.index = index;
+        suggestion.innerHTML = `
+            <span class="autocomplete-suggestion-username">${escapeHtml(user.username)}</span>
+        `;
+        suggestion.addEventListener('click', () => selectParticipant(user));
+        participantAutocompleteSuggestions.appendChild(suggestion);
+    });
+    
+    participantAutocompleteSuggestions.style.display = 'block';
+}
+
+function handleParticipantKeyDown(e) {
+    if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        highlightedParticipantIndex = Math.min(highlightedParticipantIndex + 1, currentParticipantSuggestions.length - 1);
+        updateParticipantHighlight();
+    } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        highlightedParticipantIndex = Math.max(highlightedParticipantIndex - 1, -1);
+        updateParticipantHighlight();
+    } else if (e.key === 'Enter' && highlightedParticipantIndex >= 0) {
+        e.preventDefault();
+        selectParticipant(currentParticipantSuggestions[highlightedParticipantIndex]);
+    } else if (e.key === 'Backspace' && participantInput.value === '' && selectedParticipant) {
+        removeParticipant();
+    }
+}
+
+function updateParticipantHighlight() {
+    const suggestions = participantAutocompleteSuggestions.querySelectorAll('.autocomplete-suggestion');
+    suggestions.forEach((suggestion, index) => {
+        if (index === highlightedParticipantIndex) {
+            suggestion.classList.add('highlighted');
+            suggestion.scrollIntoView({ block: 'nearest' });
+        } else {
+            suggestion.classList.remove('highlighted');
+        }
+    });
+}
+
+function selectParticipant(user) {
+    selectedParticipant = user;
+    participantInput.value = '';
+    participantAutocompleteSuggestions.style.display = 'none';
+    updateParticipantTag();
+    updateParticipantHiddenInput();
+    participantInput.focus();
+}
+
+function removeParticipant() {
+    selectedParticipant = null;
+    updateParticipantTag();
+    updateParticipantHiddenInput();
+}
+
+function updateParticipantTag() {
+    participantTags.innerHTML = '';
+    if (selectedParticipant) {
+        const tag = document.createElement('div');
+        tag.className = 'participant-tag';
+        tag.innerHTML = `
+            <span class="participant-tag-name">${escapeHtml(selectedParticipant.username)}</span>
+            <span class="participant-tag-remove" onclick="removeParticipant();" title="Remove">×</span>
+        `;
+        participantTags.appendChild(tag);
+    }
+}
+
+function updateParticipantHiddenInput() {
+    participantIdContainer.innerHTML = '';
+    if (selectedParticipant) {
+        const input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = 'user_id';
+        input.value = selectedParticipant.id;
+        participantIdContainer.appendChild(input);
+    }
+}
+
+function handleParticipantFormSubmit(e) {
+    if (!selectedParticipant) {
+        e.preventDefault();
+        alert('Please select a user to add.');
+        participantInput.focus();
+        return false;
+    }
+}
+
+function openAddParticipantForm() {
+    const form = document.getElementById('add-participant-form');
+    if (form) {
+        form.style.display = 'block';
+        selectedParticipant = null;
+        updateParticipantTag();
+        updateParticipantHiddenInput();
+        participantInput.value = '';
+        participantInput.focus();
+        // Scroll the form into view
+        setTimeout(() => {
+            form.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        }, 100);
+    }
+}
+
+function closeAddParticipantForm() {
+    const form = document.getElementById('add-participant-form');
+    if (form) {
+        form.style.display = 'none';
+        selectedParticipant = null;
+        updateParticipantTag();
+        updateParticipantHiddenInput();
+        participantInput.value = '';
+        participantAutocompleteSuggestions.style.display = 'none';
+    }
+}
+
+// Participant context menu functionality
+let selectedParticipantForContext = null;
+
+function showParticipantContextMenu(event, userId, username) {
+    // Don't show context menu for current user
+    if (userId === {{ current_user.id }}) {
+        return;
+    }
+    
+    event.preventDefault();
+    selectedParticipantForContext = { id: userId, username: username };
+    
+    const contextMenu = document.getElementById('participant-context-menu');
+    if (contextMenu) {
+        // Close any existing context menu first
+        closeParticipantContextMenu();
+        
+        contextMenu.style.display = 'block';
+        contextMenu.style.left = event.pageX + 'px';
+        contextMenu.style.top = event.pageY + 'px';
+        
+        // Ensure menu stays within viewport
+        const rect = contextMenu.getBoundingClientRect();
+        if (rect.right > window.innerWidth) {
+            contextMenu.style.left = (event.pageX - rect.width) + 'px';
+        }
+        if (rect.bottom > window.innerHeight) {
+            contextMenu.style.top = (event.pageY - rect.height) + 'px';
+        }
+        
+        // Close menu when clicking elsewhere
+        setTimeout(() => {
+            document.addEventListener('click', closeParticipantContextMenu, { once: true });
+            document.addEventListener('contextmenu', closeParticipantContextMenu, { once: true });
+        }, 0);
+    }
+}
+
+function closeParticipantContextMenu() {
+    const contextMenu = document.getElementById('participant-context-menu');
+    if (contextMenu) {
+        contextMenu.style.display = 'none';
+    }
+    selectedParticipantForContext = null;
+}
+
+function messageParticipant() {
+    if (selectedParticipantForContext) {
+        // Navigate to messages page with action=new and user_id
+        window.location.href = "{{ url_for('messages.index') }}?action=new&user_id=" + selectedParticipantForContext.id;
+    }
+    closeParticipantContextMenu();
+}
+</script>
+{% endblock %}

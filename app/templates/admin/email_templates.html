@@ -1,0 +1,170 @@
+{% extends "base.html" %}
+
+{% block title %}Email Templates - Admin{% endblock %}
+
+{% block content %}
+<div class="admin-email-templates">
+    <h1>Email Templates</h1>
+    <p>Edit email templates below. Templates support variables like {user_name}, {verification_link}, {app_name}, {feature_request_title}, {reset_link}, etc.</p>
+    
+    <div class="templates-list">
+        {% if templates %}
+            {% for template_name, template_data in templates.items() %}
+                <div class="template-item" data-template="{{ template_name }}">
+                    <h2>{{ template_name|replace('_', ' ')|title }}</h2>
+                    <form method="POST" action="{{ url_for('admin.email_templates') }}" class="template-form">
+                        <input type="hidden" name="template_name" value="{{ template_name }}">
+                        <div class="form-group">
+                            <label for="subject_{{ template_name }}">Subject:</label>
+                            <input type="text" id="subject_{{ template_name }}" name="subject" value="{{ template_data.subject }}" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="body_{{ template_name }}">Body:</label>
+                            <textarea id="body_{{ template_name }}" name="body" class="rich-text-editor" data-height="400px">{{ template_data.body }}</textarea>
+                        </div>
+                        <button type="submit" class="btn btn-primary">Save Template</button>
+                        <button type="button" class="btn btn-secondary preview-btn" data-template="{{ template_name }}">Preview</button>
+                    </form>
+                </div>
+            {% endfor %}
+        {% else %}
+            <p>No email templates found. Default templates should be available. Please refresh the page.</p>
+        {% endif %}
+    </div>
+    
+    <div id="preview-modal" class="modal" style="display:none;">
+        <div class="modal-content">
+            <span class="close-modal">&times;</span>
+            <h2>Template Preview</h2>
+            <div id="preview-content"></div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    
+    // Preview functionality
+    document.querySelectorAll('.preview-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const templateName = this.dataset.template;
+            const subject = document.getElementById('subject_' + templateName).value;
+            // Get content from Quill editor
+            const textarea = document.getElementById('body_' + templateName);
+            const body = getRichTextContent(textarea);
+            
+            // Replace template variables with sample data
+            const previewBody = body
+                .replace(/{user_name}/g, 'John Doe')
+                .replace(/{verification_link}/g, 'https://example.com/verify?token=abc123')
+                .replace(/{reset_link}/g, 'https://example.com/reset?token=xyz789')
+                .replace(/{app_name}/g, 'Sample App')
+                .replace(/{feature_request_title}/g, 'Sample Feature Request');
+            
+            document.getElementById('preview-content').innerHTML = 
+                '<h3>Subject: ' + subject.replace(/{user_name}/g, 'John Doe') + '</h3>' +
+                '<div>' + previewBody + '</div>';
+            document.getElementById('preview-modal').style.display = 'block';
+        });
+    });
+    
+    // Close modal
+    document.querySelector('.close-modal').addEventListener('click', function() {
+        document.getElementById('preview-modal').style.display = 'none';
+    });
+    
+    // Update form submission to use JSON
+    document.querySelectorAll('.template-form').forEach(form => {
+        form.addEventListener('submit', function(e) {
+            e.preventDefault();
+            const formData = new FormData(this);
+            const templateName = formData.get('template_name');
+            const subject = formData.get('subject');
+            // Get content from Quill editor
+            const textarea = document.getElementById('body_' + templateName);
+            const body = getRichTextContent(textarea);
+            
+            // Get all templates
+            const templates = {{ templates|tojson }};
+            templates[templateName] = {
+                subject: subject,
+                body: body
+            };
+            
+            // Send update
+            fetch('{{ url_for("admin.email_templates") }}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(templates)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('Template saved successfully!');
+                } else {
+                    alert('Error saving template.');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Error saving template.');
+            });
+        });
+    });
+</script>
+<style>
+.modal {
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    overflow: auto;
+    background-color: rgba(0,0,0,0.5);
+}
+
+.modal-content {
+    background-color: #fefefe;
+    margin: 5% auto;
+    padding: 20px;
+    border: 1px solid #888;
+    width: 80%;
+    max-width: 800px;
+    border-radius: 8px;
+}
+
+.close-modal {
+    color: #aaa;
+    float: right;
+    font-size: 28px;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+.close-modal:hover {
+    color: black;
+}
+
+.template-item {
+    margin-bottom: 2rem;
+    padding: 1.5rem;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    background-color: #fff;
+}
+
+/* Ensure subject input has black text */
+.template-item input[type="text"] {
+    color: #000000 !important;
+}
+
+.template-item input[type="text"]::placeholder {
+    color: #999;
+}
+</style>
+{% endblock %}
+

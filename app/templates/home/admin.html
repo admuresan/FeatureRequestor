@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+
+{% block title %}Home - Feature Requestor{% endblock %}
+
+{% block content %}
+<div class="home-admin">
+    <div class="home-logo" style="text-align: center; margin: 2rem 0;">
+        {% if has_custom_icon and icon_url %}
+            <img src="{{ icon_url }}" alt="Feature Requestor" style="max-width: 200px; max-height: 200px;">
+        {% else %}
+            <img src="{{ url_for('static', filename='images/logo.png') }}" alt="Feature Requestor" style="max-width: 200px; max-height: 200px;" onerror="this.style.display='none';">
+        {% endif %}
+    </div>
+    <h1>Welcome, {{ current_user.name }}!</h1>
+    <p>Admin Dashboard</p>
+    
+    {% if stats.todo_items %}
+    <section class="todo-items" style="margin: 2rem 0;">
+        <h2>To-Do Items</h2>
+        {% for item in stats.todo_items %}
+        <div class="todo-item alert {% if item.type == 'error' %}alert-error{% elif item.type == 'warning' %}alert-warning{% else %}alert-info{% endif %}" style="margin-bottom: 1rem; padding: 1rem; border-radius: 8px; border-left: 4px solid {% if item.type == 'error' %}#ef4444{% elif item.type == 'warning' %}#f59e0b{% else %}#3b82f6{% endif %};">
+            <h3 style="margin-top: 0; margin-bottom: 0.5rem;">{{ item.title }}</h3>
+            <p style="margin-bottom: 0.75rem;">{{ item.message }}</p>
+            <a href="{{ item.action_url }}" class="btn {% if item.type == 'error' %}btn-danger{% elif item.type == 'warning' %}btn-warning{% else %}btn-primary{% endif %}" style="text-decoration: none;">{{ item.action_text }}</a>
+        </div>
+        {% endfor %}
+    </section>
+    {% endif %}
+    
+    {% if stats.num_apps is defined %}
+    <div class="stats-summary" style="margin: 2rem 0;">
+        <h2>Platform Statistics</h2>
+        <div class="stats-grid">
+            <div class="stat-card">
+                <h3>Apps Managed</h3>
+                <p class="stat-value">{{ stats.num_apps }}</p>
+            </div>
+            <div class="stat-card">
+                <h3>Requests Made</h3>
+                <p class="stat-value">{{ stats.requests_made }}</p>
+            </div>
+            <div class="stat-card">
+                <h3>Requests Completed</h3>
+                <p class="stat-value">{{ stats.requests_completed }}</p>
+            </div>
+            <div class="stat-card">
+                <h3>Tips Received</h3>
+                <p class="stat-value">{{ format_currency(stats.tips_received_cad, 'CAD') }}</p>
+            </div>
+            <div class="stat-card">
+                <h3>Bids Collected</h3>
+                <p class="stat-value">{{ format_currency(stats.bids_collected_cad, 'CAD') }}</p>
+            </div>
+            <div class="stat-card">
+                <h3>Bids Requested</h3>
+                <p class="stat-value">{{ format_currency(stats.bids_requested_cad, 'CAD') }}</p>
+                <p class="stat-sub">Total across all not completed requests</p>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+

@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+
+{% block title %}Rules & Documentation - Feature Requestor{% endblock %}
+
+{% block content %}
+<div class="rules-page">
+    <h1>Feature Requestor - Rules & Documentation</h1>
+    
+    <section>
+        <h2>How It Works</h2>
+        <p>Feature Requestor is a platform that connects people who want features built (requesters) with developers who can build them.</p>
+    </section>
+    
+    <section>
+        <h2>For Requesters</h2>
+        <h3>Creating a Feature Request</h3>
+        <ul>
+            <li>Browse apps and select the app you want to request a feature for</li>
+            <li>Fill in the request details: title, type (UI/UX or Backend), category (Bug or Enhancement), and description</li>
+            <li>The system will check for similar requests to help avoid duplicates</li>
+            <li>You can optionally place a bid amount when creating or commenting on requests</li>
+        </ul>
+        
+        <h3>Viewing and Supporting Existing Requests</h3>
+        <ul>
+            <li>You can view all existing feature requests on the feature requests page (no sign-in required to view)</li>
+            <li>Browse requests by status: requested, in progress, or completed</li>
+            <li>Filter requests by app or search by title or comment text</li>
+            <li>You can add a bid to any existing request to support it being chosen by developers</li>
+            <li>Adding a bid to an existing request increases its total bid amount, making it more attractive to developers</li>
+            <li>To add a bid, sign in and add a comment with a bid amount on the request's detail page</li>
+        </ul>
+        
+        <h3>Bidding</h3>
+        <ul>
+            <li>You can place additional bids on existing feature requests to show support and increase the likelyhood of the request being chosen by developers</li>
+            <li> You can also comment on the request with a 0 bid to show support for the request</li>
+            <li>Bids can be placed when creating a new request or when adding a comment to an existing request</li>
+            <li>Bids are commitments to pay, but no payment is collected immediately</li>
+            <li>You must connect a Stripe account to place bids</li>
+            <li>When placing a bid, you'll see an estimated total including your proportional share of fees</li>
+        </ul>
+        
+        <h3>Payment Process</h3>
+        <ul>
+            <li>When you place a bid, no payment is collected</li>
+            <li>When a developer marks a request as completed, you can review and confirm it</li>
+            <li>Once {{ confirmation_percentage }}% of requesters who placed non-zero bids confirm the request, payments are collected</li>
+            <li>Stripe fees are calculated on the total bid amount and distributed proportionally among all bidders</li>
+            <li>Each requester pays their original bid amount plus their proportional share of fees</li>
+        </ul>
+        
+        <h3>Example</h3>
+        <p>If two people bid $10 and $40 (total $50), and Stripe fees are $1:</p>
+        <ul>
+            <li>Person who bid $10 pays: $10 + ($1 × $10/$50) = $10.20</li>
+            <li>Person who bid $40 pays: $40 + ($1 × $40/$50) = $40.80</li>
+            <li>Total collected: $51</li>
+        </ul>
+    </section>
+    
+    <section>
+        <h2>For Developers</h2>
+        <h3>Working on Requests</h3>
+        <ul>
+            <li>Browse feature requests and add yourself as a developer to requests you want to work on</li>
+            <li>If other developers are already working on a request, they must approve you</li>
+            <li>Set the request status to "in_progress" when you start working</li>
+            <li>Set a projected completion date</li>
+            <li>When finished, mark the request as "completed"</li>
+        </ul>
+        
+        <h3>Payment Distribution</h3>
+        <ul>
+            <li>When multiple developers work on a request, payment is split according to payment ratios</li>
+            <li>By default, payment is split evenly between all developers</li>
+            <li>Developers can adjust payment ratios, but all must accept the final ratios</li>
+            <li>Payments are processed in the most common payout currency, then converted to each developer's preferred currency</li>
+        </ul>
+        
+        <h3>Getting Paid</h3>
+        <ul>
+            <li>You must connect a Stripe account to receive payments</li>
+            <li>Payments are automatically transferred to your Stripe account</li>
+            <li>Stripe handles payouts to your bank account</li>
+            <li>You can generate paystubs for your records</li>
+        </ul>
+    </section>
+    
+    <section>
+        <h2>Currency</h2>
+        <p>The platform supports CAD, USD, and EUR. All currency conversions are handled automatically by Stripe at market rates.</p>
+    </section>
+    
+    <section>
+        <h2>Tips</h2>
+        <p>You can tip app owners to show appreciation for their apps. Tips are processed immediately and go directly to the app owner.</p>
+        <p><strong>Note:</strong> Tips must be at least $0.50 to ensure the amount after Stripe processing fees (2.9% + $0.30) is positive. This ensures the app owner receives a meaningful amount.</p>
+    </section>
+    
+    <section>
+        <h2>Receipts and Paystubs</h2>
+        <p>Requesters can generate receipts for payments made. Developers can generate paystubs for payments received. Both are available as PDF downloads.</p>
+    </section>
+</div>
+{% endblock %}
+

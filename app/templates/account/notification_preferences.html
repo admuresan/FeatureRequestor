@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+
+{% block title %}Notification Preferences - Feature Requestor{% endblock %}
+
+{% block content %}
+<div class="notification-preferences">
+    <h1>Notification Preferences</h1>
+    <p>Control how you receive email notifications for different events.</p>
+    
+    <div class="preferences-list">
+        {% for notif_type, notif_label in notification_types %}
+            {% set pref = preferences.get(notif_type) %}
+            {% set current_pref = pref.preference if pref else 'immediate' %}
+            
+            <div class="preference-item">
+                <h3>{{ notif_label }}</h3>
+                <form method="POST" action="{{ url_for('account.notification_preferences') }}" class="preference-form">
+                    <input type="hidden" name="notification_type" value="{{ notif_type }}">
+                    <div class="preference-options">
+                        <label>
+                            <input type="radio" name="preference" value="none" {% if current_pref == 'none' %}checked{% endif %}>
+                            None
+                        </label>
+                        <label>
+                            <input type="radio" name="preference" value="immediate" {% if current_pref == 'immediate' %}checked{% endif %}>
+                            Immediate
+                        </label>
+                        <label>
+                            <input type="radio" name="preference" value="bulk" {% if current_pref == 'bulk' %}checked{% endif %}>
+                            Bulk (daily)
+                        </label>
+                    </div>
+                    <button type="submit" class="btn btn-sm btn-primary">Save</button>
+                </form>
+                
+                {% if notif_type == 'new_request' %}
+                    <div class="custom-rules-section">
+                        <h4>Custom Rules by App</h4>
+                        {% if pref and pref.custom_rule %}
+                            {% set custom_rules = parsed_preferences.get(notif_type, {}).get('custom_rule', []) %}
+                            {% if custom_rules %}
+                                <ul class="custom-rules-list">
+                                    {% for rule in custom_rules %}
+                                        <li>
+                                            <strong>{{ rule.app_name }}</strong>: {{ rule.preference }}
+                                            <form method="POST" action="{{ url_for('account.remove_notification_rule') }}" style="display:inline;">
+                                                <input type="hidden" name="app_id" value="{{ rule.app_id }}">
+                                                <button type="submit" class="btn btn-sm btn-danger">Remove</button>
+                                            </form>
+                                        </li>
+                                    {% endfor %}
+                                </ul>
+                            {% endif %}
+                        {% endif %}
+                        
+                        <button type="button" class="btn btn-sm btn-secondary" onclick="showAddRuleForm()">Add Rule</button>
+                        <div id="add-rule-form" style="display:none; margin-top: 1rem;">
+                            <form method="POST" action="{{ url_for('account.add_notification_rule') }}">
+                                <div class="form-group">
+                                    <label for="app_id">App:</label>
+                                    <select id="app_id" name="app_id" required>
+                                        <option value="">Select an app...</option>
+                                        {% for app in all_apps %}
+                                            <option value="{{ app.id }}">{{ app.app_display_name }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label>Preference:</label>
+                                    <label><input type="radio" name="preference" value="none"> None</label>
+                                    <label><input type="radio" name="preference" value="immediate" checked> Immediate</label>
+                                    <label><input type="radio" name="preference" value="bulk"> Bulk</label>
+                                </div>
+                                <button type="submit" class="btn btn-sm btn-primary">Add Rule</button>
+                                <button type="button" class="btn btn-sm btn-secondary" onclick="hideAddRuleForm()">Cancel</button>
+                            </form>
+                        </div>
+                    </div>
+                {% endif %}
+            </div>
+        {% endfor %}
+    </div>
+    
+    <div class="back-link">
+        <a href="{{ url_for('account.settings') }}" class="btn btn-secondary">Back to Account Settings</a>
+    </div>
+</div>
+
+<script>
+function showAddRuleForm() {
+    document.getElementById('add-rule-form').style.display = 'block';
+}
+
+function hideAddRuleForm() {
+    document.getElementById('add-rule-form').style.display = 'none';
+}
+</script>
+{% endblock %}
+

@@ -1,0 +1,808 @@
+{% extends "base.html" %}
+
+{% block title %}Account Settings - Feature Requestor{% endblock %}
+
+{% block content %}
+<div class="account-settings">
+    <h1>Account Settings - {{ current_user.name }}</h1>
+    <form method="POST" action="{{ url_for('account.update') }}">
+        <div class="form-group">
+            <label for="name">Name:</label>
+            <input type="text" id="name" name="name" value="{{ current_user.name }}" required>
+        </div>
+        <div class="form-group">
+            <label for="username">Username:</label>
+            <input type="text" id="username" name="username" value="{{ current_user.username }}" readonly style="background-color: #f1f5f9; cursor: not-allowed;">
+        </div>
+        <div class="form-group">
+            <label for="account_type">Account Type:</label>
+            <div style="display: flex; align-items: center; gap: 0.5rem;">
+                <input type="text" id="account_type" name="account_type" value="{% if current_user.role == 'dev' %}Developer{% elif current_user.role == 'requester' %}Requester{% elif current_user.role == 'admin' %}Admin{% else %}{{ current_user.role|title }}{% endif %}{% if pending_role_change %} (Upgrade to Developer - Pending Approval){% endif %}" readonly style="background-color: #f1f5f9; cursor: not-allowed; flex: 1;">
+                {% if current_user.role == 'requester' and not pending_role_change %}
+                <button type="button" id="request-role-upgrade-btn" class="btn btn-sm btn-primary" style="white-space: nowrap;">Request Developer Upgrade</button>
+                {% endif %}
+            </div>
+            {% if pending_role_change %}
+                <small class="text-info" style="display: block; margin-top: 0.5rem;">
+                    ⏳ Your request to upgrade to Developer is pending admin approval. You will continue with your Requester account until approved.
+                </small>
+            {% endif %}
+        </div>
+        <div class="form-group">
+            <label for="email">Email:</label>
+            <div style="display: flex; align-items: center; gap: 0.5rem;">
+                <input type="email" id="email" name="email" value="{{ current_user.email }}" required style="flex: 1;">
+                {% if not current_user.email_verified %}
+                <button type="button" id="resend-verification-btn" class="btn btn-sm btn-secondary" style="white-space: nowrap;">Resend Verification Email</button>
+                {% endif %}
+            </div>
+            {% if not current_user.email_verified %}
+                <div class="alert alert-warning" style="margin-top: 0.5rem;">
+                    <strong>Email not verified!</strong> Please check your email (including junk/spam folder) for the verification link. Verification links expire after 24 hours.
+                </div>
+            {% else %}
+                <small class="text-success">✓ Email verified</small>
+            {% endif %}
+        </div>
+        <div class="form-group">
+            <label for="preferred_currency">Preferred Currency:</label>
+            <select id="preferred_currency" name="preferred_currency">
+                <option value="CAD" {% if current_user.preferred_currency == 'CAD' %}selected{% endif %}>CAD</option>
+                <option value="USD" {% if current_user.preferred_currency == 'USD' %}selected{% endif %}>USD</option>
+                <option value="EUR" {% if current_user.preferred_currency == 'EUR' %}selected{% endif %}>EUR</option>
+            </select>
+        </div>
+    </form>
+    
+    <div class="stripe-section">
+        <h2>Stripe Account</h2>
+        {% if is_view_as_mode %}
+            {% if current_user.stripe_account_id %}
+                <p>Stripe account connected (Status: {{ current_user.stripe_account_status or 'Unknown' }})</p>
+                <p style="color: #6b7280; font-size: 0.9rem;"><em>Stripe account ID: {{ current_user.stripe_account_id|mask_sensitive }}</em></p>
+                <p style="color: #dc2626; font-weight: bold;">⚠️ Stripe operations are disabled in view-as mode</p>
+            {% else %}
+                <p>No Stripe account connected.</p>
+            {% endif %}
+        {% else %}
+            {% if current_user.stripe_account_id %}
+                <p>Stripe account connected (Status: {{ current_user.stripe_account_status or 'Unknown' }})</p>
+                <a href="{{ url_for('stripe.disconnect') }}">Disconnect Stripe Account</a>
+            {% else %}
+                <p>No Stripe account connected.</p>
+                <a href="{{ url_for('stripe.connect') }}">Connect Stripe Account</a>
+            {% endif %}
+        {% endif %}
+    </div>
+    
+    <div class="password-section">
+        <h2>Password</h2>
+        {% if is_view_as_mode %}
+            <p style="color: #dc2626; font-weight: bold;">⚠️ Password changes are disabled in view-as mode</p>
+        {% else %}
+            <a href="{{ url_for('account.request_password_reset') }}" class="btn btn-secondary">Reset Password</a>
+        {% endif %}
+    </div>
+    
+    <div class="notification-preferences-section">
+        <h2>Notification Preferences</h2>
+        <p>Control how you receive email notifications.</p>
+        <table class="notification-preferences-table">
+            <thead>
+                <tr>
+                    <th>Preference</th>
+                    <th>No Notification</th>
+                    <th>Immediate Notifications</th>
+                    <th>Bulk Notifications Only</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for notif_type, notif_label in notification_types %}
+                    {% set pref = preferences.get(notif_type) %}
+                    {% set current_pref = pref.preference if pref else 'immediate' %}
+                    <tr>
+                        <td>{{ notif_label }}</td>
+                        <td class="radio-cell">
+                            <input type="radio" 
+                                   name="notification_{{ notif_type }}" 
+                                   value="none" 
+                                   data-notification-type="{{ notif_type }}"
+                                   {% if current_pref == 'none' %}checked{% endif %}>
+                        </td>
+                        <td class="radio-cell">
+                            <input type="radio" 
+                                   name="notification_{{ notif_type }}" 
+                                   value="immediate" 
+                                   data-notification-type="{{ notif_type }}"
+                                   {% if current_pref == 'immediate' %}checked{% endif %}>
+                        </td>
+                        <td class="radio-cell">
+                            <input type="radio" 
+                                   name="notification_{{ notif_type }}" 
+                                   value="bulk" 
+                                   data-notification-type="{{ notif_type }}"
+                                   {% if current_pref == 'bulk' %}checked{% endif %}>
+                        </td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        
+        <div class="app-specific-notifications" style="margin-top: 2rem;">
+            <h3>App-Specific Notification Settings</h3>
+            <p>Configure notifications for new requests on apps you manage. If no rule exists for an app, you will not receive notifications.</p>
+            <button type="button" class="btn btn-primary" id="add-app-rule-btn" style="margin-bottom: 1rem;">+ Add App Specific Notification Settings</button>
+            
+            {% if app_rules %}
+            <table class="app-rules-table">
+                <thead>
+                    <tr>
+                        <th>App</th>
+                        <th>No Notification</th>
+                        <th>Immediate Notifications</th>
+                        <th>Bulk Notifications Only</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="app-rules-tbody">
+                    {% for rule in app_rules %}
+                    <tr data-app-id="{{ rule.app_id }}">
+                        <td>{{ rule.app_name }}</td>
+                        <td class="radio-cell">
+                            <input type="radio" 
+                                   name="app_rule_{{ rule.app_id }}" 
+                                   value="none" 
+                                   data-app-id="{{ rule.app_id }}"
+                                   {% if rule.preference == 'none' %}checked{% endif %}>
+                        </td>
+                        <td class="radio-cell">
+                            <input type="radio" 
+                                   name="app_rule_{{ rule.app_id }}" 
+                                   value="immediate" 
+                                   data-app-id="{{ rule.app_id }}"
+                                   {% if rule.preference == 'immediate' %}checked{% endif %}>
+                        </td>
+                        <td class="radio-cell">
+                            <input type="radio" 
+                                   name="app_rule_{{ rule.app_id }}" 
+                                   value="bulk" 
+                                   data-app-id="{{ rule.app_id }}"
+                                   {% if rule.preference == 'bulk' %}checked{% endif %}>
+                        </td>
+                        <td>
+                            <button type="button" class="btn btn-sm btn-danger remove-app-rule" data-app-id="{{ rule.app_id }}">Remove</button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <p class="no-app-rules" style="color: var(--text-secondary); font-style: italic;">No app-specific notification rules configured.</p>
+            {% endif %}
+        </div>
+    </div>
+    
+</div>
+
+<!-- Modal for adding app-specific notification rule -->
+<div id="add-app-rule-modal" class="modal" style="display:none;">
+    <div class="modal-content">
+        <span class="close-modal">&times;</span>
+        <h2>Add App-Specific Notification Setting</h2>
+        <form id="add-app-rule-form">
+            <div class="form-group">
+                <label for="modal-app-select">App:</label>
+                <select id="modal-app-select" name="app_id" required>
+                    <option value="">Select an app...</option>
+                    {% for app in managed_apps %}
+                        {% set has_rule = false %}
+                        {% for rule in app_rules %}
+                            {% if rule.app_id == app.id %}
+                                {% set has_rule = true %}
+                            {% endif %}
+                        {% endfor %}
+                        {% if not has_rule %}
+                        <option value="{{ app.id }}">{{ app.app_display_name }}</option>
+                        {% endif %}
+                    {% endfor %}
+                </select>
+                <small style="color: var(--text-secondary); display: block; margin-top: 0.5rem;">Only apps without existing rules are shown. To modify an existing rule, use the table below.</small>
+            </div>
+            <div class="form-group">
+                <label>Notification Preference:</label>
+                <div class="preference-options">
+                    <label>
+                        <input type="radio" name="preference" value="none"> No Notification
+                    </label>
+                    <label>
+                        <input type="radio" name="preference" value="immediate" checked> Immediate Notifications
+                    </label>
+                    <label>
+                        <input type="radio" name="preference" value="bulk"> Bulk Notifications Only
+                    </label>
+                </div>
+            </div>
+            <div class="modal-actions">
+                <button type="submit" class="btn btn-primary">Add Rule</button>
+                <button type="button" class="btn btn-secondary modal-cancel">Cancel</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const form = document.querySelector('.account-settings form');
+    const nameInput = document.getElementById('name');
+    const emailInput = document.getElementById('email');
+    const currencySelect = document.getElementById('preferred_currency');
+    
+    let saveTimeout;
+    let isSaving = false;
+    let saveIndicator = null;
+    
+    function getSaveIndicator() {
+        if (!saveIndicator) {
+            saveIndicator = document.createElement('div');
+            saveIndicator.className = 'save-indicator';
+            saveIndicator.style.cssText = 'position: fixed; top: 20px; right: 20px; color: white; padding: 0.75rem 1.5rem; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); z-index: 1000; transition: opacity 0.3s; display: flex; align-items: center; gap: 0.75rem;';
+            document.body.appendChild(saveIndicator);
+        }
+        return saveIndicator;
+    }
+    
+    function showErrorIndicator(message) {
+        const indicator = getSaveIndicator();
+        // Clear existing content
+        indicator.innerHTML = '';
+        // Add message text
+        const messageSpan = document.createElement('span');
+        messageSpan.textContent = message;
+        indicator.appendChild(messageSpan);
+        
+        indicator.style.background = '#ef4444';
+        indicator.style.opacity = '1';
+        
+        // Add dismiss button for errors
+        const dismissButton = document.createElement('button');
+        dismissButton.className = 'indicator-dismiss';
+        dismissButton.innerHTML = '×';
+        dismissButton.setAttribute('aria-label', 'Dismiss error');
+        dismissButton.style.cssText = 'background: transparent; border: none; color: white; font-size: 1.5rem; line-height: 1; cursor: pointer; opacity: 0.8; padding: 0; width: 1.5rem; height: 1.5rem; display: flex; align-items: center; justify-content: center; border-radius: 4px; transition: opacity 0.2s, background-color 0.2s;';
+        dismissButton.onmouseover = function() {
+            this.style.opacity = '1';
+            this.style.backgroundColor = 'rgba(255, 255, 255, 0.2)';
+        };
+        dismissButton.onmouseout = function() {
+            this.style.opacity = '0.8';
+            this.style.backgroundColor = 'transparent';
+        };
+        dismissButton.onclick = function() {
+            indicator.style.opacity = '0';
+            setTimeout(function() {
+                if (indicator.style.opacity === '0') {
+                    indicator.remove();
+                    saveIndicator = null;
+                }
+            }, 300);
+        };
+        indicator.appendChild(dismissButton);
+    }
+    
+    function saveAccountChanges() {
+        if (isSaving) return;
+        
+        isSaving = true;
+        const formData = new FormData(form);
+        
+        // Show saving indicator
+        const indicator = getSaveIndicator();
+        indicator.textContent = 'Saving...';
+        indicator.style.background = '#3b82f6';
+        indicator.style.opacity = '1';
+        
+        fetch(form.action, {
+            method: 'POST',
+            body: formData,
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        })
+        .then(response => {
+            if (response.ok) {
+                return response.json().catch(() => {
+                    // If response is not JSON (redirect), treat as success
+                    return { success: true };
+                });
+            }
+            throw new Error('Save failed');
+        })
+        .then(data => {
+            // Check if email was changed from backend response
+            if (data.email_changed) {
+                // Refresh the page to update verification status
+                indicator.textContent = 'Saved! Refreshing...';
+                indicator.style.background = '#10b981';
+                setTimeout(() => {
+                    window.location.reload();
+                }, 500);
+            } else {
+                indicator.textContent = 'Saved!';
+                indicator.style.background = '#10b981';
+                setTimeout(() => {
+                    indicator.style.opacity = '0';
+                    setTimeout(() => {
+                        if (indicator.style.opacity === '0') {
+                            indicator.remove();
+                            saveIndicator = null;
+                        }
+                    }, 300);
+                }, 1000);
+            }
+        })
+        .catch(error => {
+            showErrorIndicator('Error saving');
+        })
+        .finally(() => {
+            isSaving = false;
+        });
+    }
+    
+    // Auto-save on blur for text inputs
+    nameInput.addEventListener('blur', function() {
+        clearTimeout(saveTimeout);
+        saveTimeout = setTimeout(saveAccountChanges, 300);
+    });
+    
+    emailInput.addEventListener('blur', function() {
+        clearTimeout(saveTimeout);
+        saveTimeout = setTimeout(saveAccountChanges, 300);
+    });
+    
+    // Auto-save on change for dropdown
+    currencySelect.addEventListener('change', function() {
+        clearTimeout(saveTimeout);
+        saveTimeout = setTimeout(saveAccountChanges, 300);
+    });
+    
+    // Auto-save notification preferences
+    const notificationRadios = document.querySelectorAll('input[type="radio"][data-notification-type]');
+    notificationRadios.forEach(radio => {
+        radio.addEventListener('change', function() {
+            const notificationType = this.getAttribute('data-notification-type');
+            const preference = this.value;
+            
+            if (isSaving) return;
+            
+            isSaving = true;
+            const formData = new FormData();
+            formData.append('notification_type', notificationType);
+            formData.append('preference', preference);
+            
+            const indicator = getSaveIndicator();
+            indicator.textContent = 'Saving...';
+            indicator.style.background = '#3b82f6';
+            indicator.style.opacity = '1';
+            
+            fetch('{{ url_for("account.notification_preferences") }}', {
+                method: 'POST',
+                body: formData,
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            })
+            .then(response => {
+                if (response.ok) {
+                    return response.json().catch(() => {
+                        return { success: true };
+                    });
+                }
+                throw new Error('Save failed');
+            })
+            .then(data => {
+                indicator.textContent = 'Saved!';
+                indicator.style.background = '#10b981';
+                setTimeout(() => {
+                    indicator.style.opacity = '0';
+                    setTimeout(() => {
+                        if (indicator.style.opacity === '0') {
+                            indicator.remove();
+                            saveIndicator = null;
+                        }
+                    }, 300);
+                }, 1000);
+            })
+            .catch(error => {
+                showErrorIndicator('Error saving');
+            })
+            .finally(() => {
+                isSaving = false;
+            });
+        });
+    });
+    
+    // App-specific notification rules
+    const addAppRuleBtn = document.getElementById('add-app-rule-btn');
+    const modal = document.getElementById('add-app-rule-modal');
+    const modalClose = modal ? modal.querySelector('.close-modal') : null;
+    const modalCancel = modal ? modal.querySelector('.modal-cancel') : null;
+    const addAppRuleForm = document.getElementById('add-app-rule-form');
+    
+    if (addAppRuleBtn && modal) {
+        addAppRuleBtn.addEventListener('click', function() {
+            modal.style.display = 'block';
+        });
+    }
+    
+    function closeModal() {
+        if (modal) {
+            modal.style.display = 'none';
+            if (addAppRuleForm) {
+                addAppRuleForm.reset();
+            }
+        }
+    }
+    
+    if (modalClose) {
+        modalClose.addEventListener('click', closeModal);
+    }
+    
+    if (modalCancel) {
+        modalCancel.addEventListener('click', closeModal);
+    }
+    
+    // Handle form submission for adding app rule
+    if (addAppRuleForm) {
+        addAppRuleForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const appId = document.getElementById('modal-app-select').value;
+            const preference = document.querySelector('input[name="preference"]:checked').value;
+            
+            if (!appId) {
+                alert('Please select an app.');
+                return;
+            }
+            
+            const formData = new FormData();
+            formData.append('app_id', appId);
+            formData.append('preference', preference);
+            
+            const indicator = getSaveIndicator();
+            indicator.textContent = 'Adding rule...';
+            indicator.style.background = '#3b82f6';
+            indicator.style.opacity = '1';
+            
+            fetch('{{ url_for("account.add_notification_rule") }}', {
+                method: 'POST',
+                body: formData,
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    indicator.textContent = 'Rule added!';
+                    indicator.style.background = '#10b981';
+                    
+                    // Close modal and reset form
+                    closeModal();
+                    
+                    // Refresh the page to display the new rule correctly
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 500);
+                } else {
+                    showErrorIndicator(data.error || 'Error adding rule');
+                }
+            })
+            .catch(error => {
+                showErrorIndicator('Error adding rule');
+            });
+        });
+    }
+    
+    function addAppRuleToTable(rule) {
+        let tbody = document.getElementById('app-rules-tbody');
+        if (!tbody) return;
+        
+        const row = document.createElement('tr');
+        row.setAttribute('data-app-id', rule.app_id);
+        row.innerHTML = `
+            <td>${rule.app_name}</td>
+            <td class="radio-cell">
+                <input type="radio" name="app_rule_${rule.app_id}" value="none" data-app-id="${rule.app_id}" ${rule.preference === 'none' ? 'checked' : ''}>
+            </td>
+            <td class="radio-cell">
+                <input type="radio" name="app_rule_${rule.app_id}" value="immediate" data-app-id="${rule.app_id}" ${rule.preference === 'immediate' ? 'checked' : ''}>
+            </td>
+            <td class="radio-cell">
+                <input type="radio" name="app_rule_${rule.app_id}" value="bulk" data-app-id="${rule.app_id}" ${rule.preference === 'bulk' ? 'checked' : ''}>
+            </td>
+            <td>
+                <button type="button" class="btn btn-sm btn-danger remove-app-rule" data-app-id="${rule.app_id}">Remove</button>
+            </td>
+        `;
+        tbody.appendChild(row);
+        
+        // Add event listeners for the new row
+        const radios = row.querySelectorAll('input[type="radio"]');
+        radios.forEach(radio => {
+            radio.addEventListener('change', function() {
+                updateAppRule(rule.app_id, this.value);
+            });
+        });
+        
+        const removeBtn = row.querySelector('.remove-app-rule');
+        removeBtn.addEventListener('click', function() {
+            removeAppRule(rule.app_id);
+        });
+    }
+    
+    // Handle app rule radio button changes
+    document.querySelectorAll('input[type="radio"][data-app-id]').forEach(radio => {
+        radio.addEventListener('change', function() {
+            const appId = this.getAttribute('data-app-id');
+            const preference = this.value;
+            updateAppRule(appId, preference);
+        });
+    });
+    
+    function updateAppRule(appId, preference) {
+        const formData = new FormData();
+        formData.append('app_id', appId);
+        formData.append('preference', preference);
+        
+        const indicator = getSaveIndicator();
+        indicator.textContent = 'Saving...';
+        indicator.style.background = '#3b82f6';
+        indicator.style.opacity = '1';
+        
+        fetch('{{ url_for("account.add_notification_rule") }}', {
+            method: 'POST',
+            body: formData,
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                indicator.textContent = 'Saved!';
+                indicator.style.background = '#10b981';
+                setTimeout(() => {
+                    indicator.style.opacity = '0';
+                    setTimeout(() => {
+                        if (indicator.style.opacity === '0') {
+                            indicator.remove();
+                            saveIndicator = null;
+                        }
+                    }, 300);
+                }, 1000);
+            } else {
+                showErrorIndicator(data.error || 'Error saving');
+            }
+        })
+        .catch(error => {
+            showErrorIndicator('Error saving');
+        });
+    }
+    
+    // Handle remove app rule buttons
+    document.querySelectorAll('.remove-app-rule').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const appId = this.getAttribute('data-app-id');
+            removeAppRule(appId);
+        });
+    });
+    
+    function removeAppRule(appId) {
+        if (!confirm('Are you sure you want to remove this notification rule?')) {
+            return;
+        }
+        
+        const formData = new FormData();
+        formData.append('app_id', appId);
+        
+        const indicator = getSaveIndicator();
+        indicator.textContent = 'Removing...';
+        indicator.style.background = '#3b82f6';
+        indicator.style.opacity = '1';
+        
+        fetch('{{ url_for("account.remove_notification_rule") }}', {
+            method: 'POST',
+            body: formData,
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                indicator.textContent = 'Rule removed!';
+                indicator.style.background = '#10b981';
+                
+                // Remove the row from the table
+                const row = document.querySelector(`tr[data-app-id="${appId}"]`);
+                if (row) {
+                    row.remove();
+                }
+                
+                // Check if table is empty and show message
+                const tbody = document.getElementById('app-rules-tbody');
+                if (tbody && tbody.children.length === 0) {
+                    const appRulesDiv = document.querySelector('.app-specific-notifications');
+                    const noRulesMsg = document.createElement('p');
+                    noRulesMsg.className = 'no-app-rules';
+                    noRulesMsg.style.cssText = 'color: var(--text-secondary); font-style: italic;';
+                    noRulesMsg.textContent = 'No app-specific notification rules configured.';
+                    const table = tbody.closest('table');
+                    if (table) {
+                        table.remove();
+                    }
+                    const addBtn = document.getElementById('add-app-rule-btn');
+                    addBtn.parentNode.insertBefore(noRulesMsg, addBtn.nextSibling);
+                }
+                
+                setTimeout(() => {
+                    indicator.style.opacity = '0';
+                    setTimeout(() => {
+                        if (indicator.style.opacity === '0') {
+                            indicator.remove();
+                            saveIndicator = null;
+                        }
+                    }, 300);
+                }, 1000);
+            } else {
+                showErrorIndicator(data.error || 'Error removing rule');
+            }
+        })
+        .catch(error => {
+            showErrorIndicator('Error removing rule');
+        });
+    }
+    
+    // Handle request role upgrade button
+    const requestRoleUpgradeBtn = document.getElementById('request-role-upgrade-btn');
+    if (requestRoleUpgradeBtn) {
+        requestRoleUpgradeBtn.addEventListener('click', function() {
+            if (isSaving) return;
+            
+            if (!confirm('Are you sure you want to request an upgrade to Developer? An admin will review your request. You will continue with your Requester account until approved.')) {
+                return;
+            }
+            
+            isSaving = true;
+            const indicator = getSaveIndicator();
+            indicator.textContent = 'Submitting request...';
+            indicator.style.background = '#3b82f6';
+            indicator.style.opacity = '1';
+            
+            fetch('{{ url_for("account.request_role_upgrade") }}', {
+                method: 'POST',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                }
+            })
+            .then(response => {
+                if (response.ok) {
+                    return response.json().catch(() => {
+                        return { success: true };
+                    });
+                }
+                return response.json().then(data => {
+                    throw new Error(data.error || 'Request failed');
+                });
+            })
+            .then(data => {
+                if (data.success) {
+                    indicator.textContent = data.message || 'Request submitted!';
+                    indicator.style.background = '#10b981';
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 1500);
+                } else {
+                    throw new Error(data.error || 'Request failed');
+                }
+            })
+            .catch(error => {
+                showErrorIndicator(error.message || 'Error submitting request');
+            })
+            .finally(() => {
+                isSaving = false;
+            });
+        });
+    }
+    
+    // Handle resend verification email button
+    const resendVerificationBtn = document.getElementById('resend-verification-btn');
+    if (resendVerificationBtn) {
+        resendVerificationBtn.addEventListener('click', function() {
+            if (isSaving) return;
+            
+            isSaving = true;
+            const indicator = getSaveIndicator();
+            indicator.textContent = 'Sending verification email...';
+            indicator.style.background = '#3b82f6';
+            indicator.style.opacity = '1';
+            
+            fetch('{{ url_for("account.resend_verification") }}', {
+                method: 'POST',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                }
+            })
+            .then(response => {
+                if (response.ok) {
+                    return response;
+                }
+                throw new Error('Failed to send verification email');
+            })
+            .then(() => {
+                indicator.textContent = 'Verification email sent!';
+                indicator.style.background = '#10b981';
+                setTimeout(() => {
+                    indicator.style.opacity = '0';
+                    setTimeout(() => {
+                        if (indicator.style.opacity === '0') {
+                            indicator.remove();
+                            saveIndicator = null;
+                        }
+                    }, 300);
+                }, 2000);
+                // Reload page to show success message and update verification status
+                setTimeout(() => {
+                    window.location.reload();
+                }, 2000);
+            })
+            .catch(error => {
+                showErrorIndicator('Error sending verification email');
+            })
+            .finally(() => {
+                isSaving = false;
+            });
+        });
+    }
+});
+</script>
+<style>
+#add-app-rule-modal.modal {
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    overflow: auto;
+    background-color: rgba(0,0,0,0.5);
+}
+
+#add-app-rule-modal .modal-content {
+    background-color: #fefefe;
+    margin: 5% auto;
+    padding: 20px;
+    border: 1px solid #888;
+    width: 80%;
+    max-width: 500px;
+    border-radius: 8px;
+    position: relative;
+}
+
+#add-app-rule-modal .close-modal {
+    color: #aaa;
+    float: right;
+    font-size: 28px;
+    font-weight: bold;
+    cursor: pointer;
+    line-height: 1;
+}
+
+#add-app-rule-modal .close-modal:hover {
+    color: black;
+}
+</style>
+{% endblock %}
+

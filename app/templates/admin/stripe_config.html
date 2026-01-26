@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+
+{% block title %}Stripe Configuration - Admin{% endblock %}
+
+{% block content %}
+<div class="admin-stripe-config">
+    <h1>Stripe Configuration</h1>
+    
+    {% if has_env_vars %}
+    <div class="alert alert-info" style="margin-bottom: 2rem; padding: 1rem; background-color: #dbeafe; border-left: 4px solid #3b82f6; border-radius: 4px;">
+        <strong>Note:</strong> Environment variables are set for Stripe API keys. Environment variables take precedence over the configuration below. 
+        If you want to use the form below, you may need to unset the environment variables first.
+    </div>
+    {% endif %}
+    
+    <div class="instructions" style="margin-bottom: 2rem; padding: 1.5rem; background-color: #f3f4f6; border-radius: 8px;">
+        <h2 style="margin-top: 0;">How to Get Your Stripe API Keys</h2>
+        <ol style="line-height: 1.8;">
+            <li><strong>Create a Stripe Account:</strong> If you don't have one, sign up at <a href="https://stripe.com" target="_blank">stripe.com</a></li>
+            <li><strong>Access the Dashboard:</strong> Log in to your <a href="https://dashboard.stripe.com" target="_blank">Stripe Dashboard</a></li>
+            <li><strong>Get API Keys:</strong>
+                <ul>
+                    <li>Go to <strong>Developers</strong> → <strong>API keys</strong> in the sidebar</li>
+                    <li>You'll see two keys: <strong>Publishable key</strong> (starts with <code>pk_</code>) and <strong>Secret key</strong> (starts with <code>sk_</code>)</li>
+                    <li>For testing, use the <strong>Test mode</strong> keys (toggle in the top right)</li>
+                    <li>For production, use the <strong>Live mode</strong> keys</li>
+                </ul>
+            </li>
+            <li><strong>Get Stripe Connect Client ID:</strong>
+                <ul>
+                    <li>Go to <strong>Settings</strong> → <strong>Connect</strong> in the sidebar</li>
+                    <li>If you haven't set up Connect yet, click <strong>Get started</strong> and follow the setup</li>
+                    <li>Find your <strong>Client ID</strong> (starts with <code>ca_</code>)</li>
+                </ul>
+            </li>
+            <li><strong>Set Up Webhooks (Optional but Recommended):</strong>
+                <ul>
+                    <li>Go to <strong>Developers</strong> → <strong>Webhooks</strong></li>
+                    <li>Click <strong>Add endpoint</strong></li>
+                    <li>Enter your webhook URL: <code>{{ request.url_root.rstrip('/') }}/stripe/webhook</code></li>
+                    <li>Select events to listen to (payment-related events)</li>
+                    <li>Copy the <strong>Signing secret</strong> (starts with <code>whsec_</code>)</li>
+                </ul>
+            </li>
+        </ol>
+        <p><strong>Important:</strong> Keep your secret keys secure! Never commit them to version control. For production, consider using environment variables instead of storing them in the config file.</p>
+    </div>
+    
+    <form method="POST" action="{{ url_for('admin.stripe_config') }}">
+        <div class="form-group">
+            <label for="stripe_public_key">Stripe Publishable Key:</label>
+            <input type="text" id="stripe_public_key" name="stripe_public_key" 
+                   value="{{ config.stripe_public_key or '' }}" 
+                   placeholder="pk_test_... or pk_live_..." 
+                   style="width: 100%; max-width: 500px;">
+            <small>Your Stripe publishable key (starts with <code>pk_</code>). Found in Developers → API keys.</small>
+        </div>
+        
+        <div class="form-group">
+            <label for="stripe_secret_key">Stripe Secret Key:</label>
+            <input type="password" id="stripe_secret_key" name="stripe_secret_key" 
+                   value="{{ config.stripe_secret_key or '' }}" 
+                   placeholder="sk_test_... or sk_live_..." 
+                   style="width: 100%; max-width: 500px;">
+            <small>Your Stripe secret key (starts with <code>sk_</code>). Found in Developers → API keys. Keep this secure!</small>
+        </div>
+        
+        <div class="form-group">
+            <label for="stripe_client_id">Stripe Connect Client ID:</label>
+            <input type="text" id="stripe_client_id" name="stripe_client_id" 
+                   value="{{ config.stripe_client_id or '' }}" 
+                   placeholder="ca_..." 
+                   style="width: 100%; max-width: 500px;">
+            <small>Your Stripe Connect Client ID (starts with <code>ca_</code>). Found in Settings → Connect.</small>
+        </div>
+        
+        <div class="form-group">
+            <label for="stripe_webhook_secret">Stripe Webhook Secret (Optional):</label>
+            <input type="password" id="stripe_webhook_secret" name="stripe_webhook_secret" 
+                   value="{{ config.stripe_webhook_secret or '' }}" 
+                   placeholder="whsec_..." 
+                   style="width: 100%; max-width: 500px;">
+            <small>Your webhook signing secret (starts with <code>whsec_</code>). Found in Developers → Webhooks after creating an endpoint.</small>
+        </div>
+        
+        <button type="submit" class="btn btn-primary">Save Configuration</button>
+    </form>
+    
+    <div class="environment-variables-section" style="margin-top: 3rem; padding: 1.5rem; background-color: #fef3c7; border-left: 4px solid #f59e0b; border-radius: 4px;">
+        <h2 style="margin-top: 0;">Alternative: Using Environment Variables</h2>
+        <p>For better security (especially in production), you can set these as environment variables instead:</p>
+        <pre style="background-color: #1f2937; color: #f9fafb; padding: 1rem; border-radius: 4px; overflow-x: auto;"><code>STRIPE_PUBLIC_KEY=pk_test_...
+STRIPE_SECRET_KEY=sk_test_...
+STRIPE_CLIENT_ID=ca_...
+STRIPE_WEBHOOK_SECRET=whsec_...</code></pre>
+        <p><strong>Note:</strong> Environment variables take precedence over the configuration form above. If environment variables are set, they will be used instead of the values in this form.</p>
+    </div>
+</div>
+{% endblock %}
+

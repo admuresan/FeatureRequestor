@@ -1,0 +1,145 @@
+{% extends "base.html" %}
+
+{% block title %}{{ app.app_display_name }} - Statistics{% endblock %}
+
+{% block content %}
+<div class="app-stats">
+    <h1>{{ app.app_display_name }} - Statistics</h1>
+    <p><a href="{{ url_for('apps.detail', app_name=app.app_name) }}">← Back to App Page</a></p>
+    
+    <div class="stats-filters">
+        <h2>Filters</h2>
+        <form method="GET" action="{{ url_for('apps.stats', app_name=app.app_name) }}" class="filter-form">
+            <div class="filter-row">
+                <div class="form-group">
+                    <label for="status">Status:</label>
+                    <select id="status" name="status">
+                        <option value="">All</option>
+                        <option value="requested" {% if status_filter == 'requested' %}selected{% endif %}>Requested</option>
+                        <option value="in_progress" {% if status_filter == 'in_progress' %}selected{% endif %}>In Progress</option>
+                        <option value="completed" {% if status_filter == 'completed' %}selected{% endif %}>Completed</option>
+                        <option value="confirmed" {% if status_filter == 'confirmed' %}selected{% endif %}>Confirmed</option>
+                        <option value="cancelled" {% if status_filter == 'cancelled' %}selected{% endif %}>Cancelled</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label for="request_type">Request Type:</label>
+                    <select id="request_type" name="request_type">
+                        <option value="">All</option>
+                        <option value="UI/UX" {% if request_type_filter == 'UI/UX' %}selected{% endif %}>UI/UX</option>
+                        <option value="backend" {% if request_type_filter == 'backend' %}selected{% endif %}>Backend</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label for="request_category">Category:</label>
+                    <select id="request_category" name="request_category">
+                        <option value="">All</option>
+                        <option value="bug" {% if request_category_filter == 'bug' %}selected{% endif %}>Bug</option>
+                        <option value="enhancement" {% if request_category_filter == 'enhancement' %}selected{% endif %}>Enhancement</option>
+                    </select>
+                </div>
+            </div>
+            
+            <div class="filter-row">
+                <div class="form-group">
+                    <label for="date_from">Date From:</label>
+                    <input type="date" id="date_from" name="date_from" value="{{ date_from }}">
+                </div>
+                
+                <div class="form-group">
+                    <label for="date_to">Date To:</label>
+                    <input type="date" id="date_to" name="date_to" value="{{ date_to }}">
+                </div>
+                
+                <div class="form-group">
+                    <label for="bid_min">Min Bid Amount:</label>
+                    <input type="number" id="bid_min" name="bid_min" step="0.01" min="0" value="{{ bid_min if bid_min else '' }}">
+                </div>
+                
+                <div class="form-group">
+                    <label for="bid_max">Max Bid Amount:</label>
+                    <input type="number" id="bid_max" name="bid_max" step="0.01" min="0" value="{{ bid_max if bid_max else '' }}">
+                </div>
+            </div>
+            
+            <button type="submit" class="btn btn-primary">Apply Filters</button>
+            <a href="{{ url_for('apps.stats', app_name=app.app_name) }}" class="btn btn-secondary">Clear Filters</a>
+        </form>
+    </div>
+    
+    <div class="stats-summary">
+        <h2>Summary Statistics</h2>
+        <div class="stats-grid">
+            <div class="stat-card">
+                <h3>Number of Requests</h3>
+                <p class="stat-value">{{ stats.num_requests }}</p>
+            </div>
+            
+            <div class="stat-card">
+                <h3>Number of Developers</h3>
+                <p class="stat-value">{{ stats.num_developers }}</p>
+                {% if stats.developers %}
+                    <button class="btn btn-sm btn-link" onclick="toggleList('developers-list')">Show/Hide List</button>
+                    <ul id="developers-list" class="expandable-list" style="display:none;">
+                        {% for dev in stats.developers %}
+                            <li>{{ dev.name }} ({{ dev.email }})</li>
+                        {% endfor %}
+                    </ul>
+                {% endif %}
+            </div>
+            
+            <div class="stat-card">
+                <h3>Number of Requesters</h3>
+                <p class="stat-value">{{ stats.num_requesters }}</p>
+                {% if stats.requesters %}
+                    <button class="btn btn-sm btn-link" onclick="toggleList('requesters-list')">Show/Hide List</button>
+                    <ul id="requesters-list" class="expandable-list" style="display:none;">
+                        {% for requester in stats.requesters %}
+                            <li>{{ requester.name }} ({{ requester.email }})</li>
+                        {% endfor %}
+                    </ul>
+                {% endif %}
+            </div>
+            
+            <div class="stat-card">
+                <h3>Number of Comments</h3>
+                <p class="stat-value">{{ stats.num_comments }}</p>
+            </div>
+            
+            <div class="stat-card">
+                <h3>Number of Payments</h3>
+                <p class="stat-value">{{ stats.num_payments }}</p>
+            </div>
+            
+            <div class="stat-card">
+                <h3>Total Payments Made</h3>
+                <p class="stat-value">${{ stats.total_payments }}</p>
+            </div>
+            
+            <div class="stat-card">
+                <h3>Total Bid Amount Requested</h3>
+                <p class="stat-value">${{ stats.total_bid_requested }}</p>
+            </div>
+            
+            <div class="stat-card">
+                <h3>Total Bid Amount Worked On</h3>
+                <p class="stat-value">${{ stats.total_bid_worked_on }}</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function toggleList(listId) {
+    const list = document.getElementById(listId);
+    if (list.style.display === 'none') {
+        list.style.display = 'block';
+    } else {
+        list.style.display = 'none';
+    }
+}
+</script>
+{% endblock %}
+

@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+
+{% block title %}Remove Developer - Admin{% endblock %}
+
+{% block content %}
+<div class="admin-remove-developer">
+    <h1>Remove Developer from Request</h1>
+    
+    <div class="info-section">
+        <p><strong>Request:</strong> <a href="{{ url_for('feature_requests.detail', request_id=feature_request.id) }}">{{ feature_request.title }}</a></p>
+        <p><strong>Developer:</strong> {{ developer.name }} ({{ developer.email }})</p>
+    </div>
+    
+    <form method="POST" action="{{ url_for('admin.remove_developer_from_request', request_id=feature_request.id, developer_id=developer.id) }}">
+        <div class="form-group">
+            <label for="reason">Reason (optional):</label>
+            <textarea id="reason" name="reason" rows="4" placeholder="Enter reason for removing this developer..."></textarea>
+            <small>This reason will be included in the notification sent to the developer.</small>
+        </div>
+        
+        <button type="submit" class="btn btn-danger" onclick="return confirm('Are you sure you want to remove this developer from the request?')">Remove Developer</button>
+        <a href="{{ url_for('feature_requests.detail', request_id=feature_request.id) }}" class="btn btn-secondary">Cancel</a>
+    </form>
+</div>
+{% endblock %}
+

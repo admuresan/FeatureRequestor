@@ -1,0 +1,195 @@
+{% extends "base.html" %}
+
+{% block title %}Home - Feature Requestor{% endblock %}
+
+{% block content %}
+<div class="home-developer">
+    <div class="home-logo" style="text-align: center; margin: 2rem 0;">
+        {% if has_custom_icon and icon_url %}
+            <img src="{{ icon_url }}" alt="Feature Requestor" style="max-width: 200px; max-height: 200px;">
+        {% else %}
+            <img src="{{ url_for('static', filename='images/logo.png') }}" alt="Feature Requestor" style="max-width: 200px; max-height: 200px;" onerror="this.style.display='none';">
+        {% endif %}
+    </div>
+    <h1>Welcome, {{ current_user.name }}!</h1>
+    
+    {% if stats.todo_items %}
+    <section class="todo-items" style="margin: 2rem 0;">
+        <h2>To-Do Items</h2>
+        {% for item in stats.todo_items %}
+        <div class="todo-item alert {% if item.type == 'error' %}alert-error{% elif item.type == 'warning' %}alert-warning{% else %}alert-info{% endif %}" style="margin-bottom: 1rem; padding: 1rem; border-radius: 8px; border-left: 4px solid {% if item.type == 'error' %}#ef4444{% elif item.type == 'warning' %}#f59e0b{% else %}#3b82f6{% endif %};">
+            <h3 style="margin-top: 0; margin-bottom: 0.5rem;">{{ item.title }}</h3>
+            <p style="margin-bottom: 0.75rem;">{{ item.message }}</p>
+            <a href="{{ item.action_url }}" class="btn {% if item.type == 'error' %}btn-danger{% elif item.type == 'warning' %}btn-warning{% else %}btn-primary{% endif %}" style="text-decoration: none;">{{ item.action_text }}</a>
+        </div>
+        {% endfor %}
+    </section>
+    {% endif %}
+    
+    {% if stats.has_requester_activity %}
+        <div class="tabs">
+            <button class="tab-button active" onclick="switchTab('dev')">Developer Summary</button>
+            <button class="tab-button" onclick="switchTab('requester')">Requester Summary</button>
+        </div>
+    {% endif %}
+    
+    <div id="dev-tab" class="tab-content {% if not stats.has_requester_activity %}active{% endif %}">
+    <div class="stats-summary">
+        <h2>Summary</h2>
+        <div class="stats-grid">
+            <div class="stat-card">
+                <h3>In Progress</h3>
+                <p class="stat-value">{{ stats.in_progress_count }}</p>
+                <p class="stat-sub">${{ stats.in_progress_bid }}</p>
+            </div>
+            <div class="stat-card">
+                <h3>Finished</h3>
+                <p class="stat-value">{{ stats.finished_count }}</p>
+                <p class="stat-sub">${{ stats.finished_bid }}</p>
+            </div>
+            <div class="stat-card">
+                <h3>Finished Since Last Pay</h3>
+                <p class="stat-value">{{ stats.finished_since_last_pay_count }}</p>
+                <p class="stat-sub">${{ stats.finished_since_last_pay_bid }}</p>
+            </div>
+            <div class="stat-card">
+                <h3>Unpaid Finished</h3>
+                <p class="stat-value">${{ stats.unpaid_finished_bid }}</p>
+            </div>
+        </div>
+    </div>
+    
+    <section class="my-requests">
+        <h2>Requests I'm Working On</h2>
+        {% for request in stats.dev_requests %}
+            <div class="request-card">
+                <h3><a href="{{ url_for('feature_requests.detail', request_id=request.id) }}">{{ request.title }}</a></h3>
+                <p>Status: {{ request.status }}</p>
+            </div>
+        {% else %}
+            <p>You're not working on any requests yet.</p>
+        {% endfor %}
+    </section>
+    
+    <section class="paystubs">
+        <h2>Paystubs & Receipts</h2>
+        <a href="{{ url_for('receipts.generate_paystub') }}" class="btn btn-primary">Generate Paystub</a>
+        <a href="{{ url_for('receipts.generate_receipt') }}" class="btn btn-secondary">Generate Receipt</a>
+    </section>
+    
+    <section class="rules-link">
+        <a href="{{ url_for('rules.index') }}" class="btn btn-secondary">View Rules & Documentation</a>
+    </section>
+    
+    {% if stats.approval_requests %}
+        <section class="approval-requests">
+            <h2>Developer Approval Requests</h2>
+            <p>New developers have been added to these requests and need your approval:</p>
+            {% for request in stats.approval_requests %}
+                <div class="request-card">
+                    <h3><a href="{{ url_for('feature_requests.detail', request_id=request.id) }}">{{ request.title }}</a></h3>
+                    <a href="{{ url_for('feature_requests.detail', request_id=request.id) }}" class="btn btn-primary">Review</a>
+                </div>
+            {% endfor %}
+        </section>
+    {% endif %}
+    
+    {% if stats.ratio_mode_requests %}
+        <section class="ratio-mode-requests">
+            <h2>Payment Ratio Setup Required</h2>
+            <p>These requests need payment ratios to be set and accepted:</p>
+            {% for request in stats.ratio_mode_requests %}
+                <div class="request-card">
+                    <h3><a href="{{ url_for('feature_requests.payment_ratios', request_id=request.id) }}">{{ request.title }}</a></h3>
+                    <a href="{{ url_for('feature_requests.payment_ratios', request_id=request.id) }}" class="btn btn-primary">Set Ratios</a>
+                </div>
+            {% endfor %}
+        </section>
+    {% endif %}
+    </div>
+    
+    {% if stats.has_requester_activity %}
+        <div id="requester-tab" class="tab-content">
+            <div class="stats-summary">
+                <h2>Requester Summary</h2>
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <h3>Total Requests</h3>
+                        <p class="stat-value">{{ stats.requester_stats.total_requests }}</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Total Bid Amount</h3>
+                        <p class="stat-value">${{ stats.requester_stats.total_bid_amount }}</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3>In Progress</h3>
+                        <p class="stat-value">{{ stats.requester_stats.in_progress_count }}</p>
+                        <p class="stat-sub">${{ stats.requester_stats.in_progress_bid }}</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Finished</h3>
+                        <p class="stat-value">{{ stats.requester_stats.finished_count }}</p>
+                        <p class="stat-sub">${{ stats.requester_stats.finished_bid }}</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Cancelled</h3>
+                        <p class="stat-value">{{ stats.requester_stats.cancelled_count }}</p>
+                        <p class="stat-sub">${{ stats.requester_stats.cancelled_bid }}</p>
+                    </div>
+                </div>
+            </div>
+            
+            <section class="my-requests">
+                <h2>My Feature Requests</h2>
+                {% for request in stats.requester_stats.user_requests %}
+                    <div class="request-card">
+                        <h3><a href="{{ url_for('feature_requests.detail', request_id=request.id) }}">{{ request.title }}</a></h3>
+                        <p>Status: {{ request.status }}</p>
+                    </div>
+                {% else %}
+                    <p>You haven't made any feature requests yet.</p>
+                {% endfor %}
+            </section>
+            
+            {% if stats.requester_stats.approve_mode_requests %}
+                <section class="approval-requests">
+                    <h2>Requests Awaiting Approval</h2>
+                    <p>These requests have been completed and are waiting for your approval:</p>
+                    {% for request in stats.requester_stats.approve_mode_requests %}
+                        <div class="request-card">
+                            <h3><a href="{{ url_for('feature_requests.detail', request_id=request.id) }}">{{ request.title }}</a></h3>
+                            <a href="{{ url_for('feature_requests.detail', request_id=request.id) }}" class="btn btn-primary">Review</a>
+                        </div>
+                    {% endfor %}
+                </section>
+            {% endif %}
+            
+            <section class="receipts">
+                <h2>Receipts</h2>
+                <a href="{{ url_for('receipts.generate_receipt') }}" class="btn btn-primary">Generate Receipt</a>
+            </section>
+        </div>
+    {% endif %}
+</div>
+
+<script>
+function switchTab(tabName) {
+    // Hide all tabs
+    document.querySelectorAll('.tab-content').forEach(tab => {
+        tab.classList.remove('active');
+    });
+    
+    // Remove active class from all buttons
+    document.querySelectorAll('.tab-button').forEach(btn => {
+        btn.classList.remove('active');
+    });
+    
+    // Show selected tab
+    document.getElementById(tabName + '-tab').classList.add('active');
+    
+    // Add active class to clicked button
+    event.target.classList.add('active');
+}
+</script>
+{% endblock %}
+

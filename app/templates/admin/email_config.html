@@ -1,0 +1,649 @@
+{% extends "base.html" %}
+
+{% block title %}Email Configuration - Admin{% endblock %}
+
+{% block content %}
+<div class="admin-email-config">
+    <h1>Email Configuration</h1>
+    <form method="POST" action="{{ url_for('admin.email_config') }}">
+        <div class="form-group">
+            <label for="from_email_mask">From Email Mask:</label>
+            <input type="email" id="from_email_mask" name="from_email_mask" value="{{ config.from_email_mask or '' }}" required>
+            <small>The email address users see in their inbox</small>
+        </div>
+        <div class="form-group">
+            <label for="smtp_host">SMTP Host:</label>
+            <input type="text" id="smtp_host" name="smtp_host" value="{{ config.smtp_host or '' }}" required>
+            <small>e.g., smtp.gmail.com</small>
+        </div>
+        <div class="form-group">
+            <label for="smtp_port">SMTP Port:</label>
+            <input type="number" id="smtp_port" name="smtp_port" value="{{ config.smtp_port or 587 }}" required>
+            <small>587 for TLS, 465 for SSL</small>
+        </div>
+        <div class="form-group">
+            <label for="smtp_security">Connection Security:</label>
+            <select id="smtp_security" name="smtp_security">
+                <option value="TLS" {% if config.smtp_security == 'TLS' %}selected{% endif %}>TLS</option>
+                <option value="SSL" {% if config.smtp_security == 'SSL' %}selected{% endif %}>SSL</option>
+                <option value="None" {% if config.smtp_security == 'None' %}selected{% endif %}>None</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="smtp_username">SMTP Username (Email):</label>
+            <input type="email" id="smtp_username" name="smtp_username" value="{{ config.smtp_username or '' }}" required>
+        </div>
+        <div class="form-group">
+            <label for="smtp_password">SMTP Password:</label>
+            <input type="password" id="smtp_password" name="smtp_password" value="{{ config.smtp_password or '' }}" required>
+            <small>Use app-specific password for Gmail</small>
+        </div>
+        <button type="submit" class="btn btn-primary">Save Configuration</button>
+    </form>
+    
+    <div class="test-email-section">
+        <h2>Test Email</h2>
+        <form id="test-email-form">
+            <div class="form-group">
+                <label for="test_email">Test Email Address:</label>
+                <input type="email" id="test_email" name="test_email" required>
+            </div>
+            <button type="submit" class="btn btn-secondary">Send Test Email</button>
+        </form>
+        <div id="test-email-result"></div>
+    </div>
+    
+    <div class="email-templates-section">
+        <h2>Email Templates</h2>
+        <p>Edit email templates below. Templates support variables like {user_name}, {verification_link}, {app_name}, {feature_request_title}, {reset_link}, etc.</p>
+        
+        <div class="templates-accordion">
+            {% if templates %}
+                {% for template_name, template_data in templates.items() %}
+                    <div class="template-accordion-item">
+                        <button class="template-accordion-header" type="button" data-template="{{ template_name }}">
+                            <span class="template-name">{{ template_name|replace('_', ' ')|title }}</span>
+                            <span class="accordion-icon">▼</span>
+                        </button>
+                        <div class="template-accordion-content" style="display: none;">
+                            <form method="POST" action="{{ url_for('admin.email_templates') }}" class="template-form">
+                                <input type="hidden" name="template_name" value="{{ template_name }}">
+                                <div class="form-group">
+                                    <label for="subject_{{ template_name }}">Subject:</label>
+                                    <input type="text" id="subject_{{ template_name }}" name="subject" value="{{ template_data.subject }}" required>
+                                </div>
+                                <div class="form-group">
+                                    <label for="body_{{ template_name }}">Body:</label>
+                                    <textarea id="body_{{ template_name }}" name="body" class="rich-text-editor" data-height="400px">{{ template_data.body }}</textarea>
+                                </div>
+                                <button type="submit" class="btn btn-primary">Save Template</button>
+                                <button type="button" class="btn btn-secondary preview-btn" data-template="{{ template_name }}">Preview</button>
+                                <button type="button" class="btn btn-info test-template-btn" data-template="{{ template_name }}">Send Test Email</button>
+                            </form>
+                        </div>
+                    </div>
+                {% endfor %}
+            {% else %}
+                <p>No email templates found. Default templates should be available. Please refresh the page.</p>
+            {% endif %}
+        </div>
+    </div>
+    
+    <div id="preview-modal" class="modal" style="display:none;">
+        <div class="modal-content">
+            <span class="close-modal">&times;</span>
+            <h2>Template Preview</h2>
+            <div id="preview-content"></div>
+        </div>
+    </div>
+    
+    <div id="test-email-modal" class="modal" style="display:none;">
+        <div class="modal-content">
+            <span class="close-test-modal">&times;</span>
+            <h2>Send Test Email</h2>
+            <form id="test-template-form">
+                <input type="hidden" id="test-template-name" name="template_name">
+                <div class="form-group">
+                    <label for="test-user-select">Select User Account:</label>
+                    <select id="test-user-select" name="user_id" required>
+                        <option value="">Loading users...</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <button type="submit" class="btn btn-primary">Send Test Email</button>
+                    <button type="button" class="btn btn-secondary" id="cancel-test-email">Cancel</button>
+                </div>
+                <div id="test-email-result" style="display: none;"></div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+document.getElementById('test-email-form').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const email = document.getElementById('test_email').value;
+    const resultDiv = document.getElementById('test-email-result');
+    
+    resultDiv.innerHTML = 'Sending...';
+    
+    try {
+        const response = await fetch('{{ url_for("admin.test_email") }}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: `test_email=${encodeURIComponent(email)}`
+        });
+        
+        const data = await response.json();
+        if (data.success) {
+            resultDiv.innerHTML = '<div class="flash-message flash-success">' + data.message + '</div>';
+        } else {
+            resultDiv.innerHTML = '<div class="flash-message flash-error">' + data.message + '</div>';
+        }
+        // Initialize the newly added flash message
+        if (window.initializeFlashMessages) {
+            window.initializeFlashMessages();
+        }
+    } catch (error) {
+        resultDiv.innerHTML = '<div class="flash-message flash-error">Error: ' + error.message + '</div>';
+        // Initialize the newly added flash message
+        if (window.initializeFlashMessages) {
+            window.initializeFlashMessages();
+        }
+    }
+});
+
+// Accordion functionality for email templates
+document.querySelectorAll('.template-accordion-header').forEach(header => {
+    header.addEventListener('click', function() {
+        const content = this.nextElementSibling;
+        const icon = this.querySelector('.accordion-icon');
+        const isOpen = content.style.display !== 'none';
+        
+        // Close all other accordions
+        document.querySelectorAll('.template-accordion-content').forEach(item => {
+            if (item !== content) {
+                item.style.display = 'none';
+                const otherHeader = item.previousElementSibling;
+                if (otherHeader) {
+                    otherHeader.querySelector('.accordion-icon').textContent = '▼';
+                    otherHeader.classList.remove('active');
+                }
+            }
+        });
+        
+        // Toggle current accordion
+        if (isOpen) {
+            content.style.display = 'none';
+            icon.textContent = '▼';
+            this.classList.remove('active');
+        } else {
+            content.style.display = 'block';
+            icon.textContent = '▲';
+            this.classList.add('active');
+        }
+    });
+});
+
+// Preview functionality
+document.querySelectorAll('.preview-btn').forEach(btn => {
+    btn.addEventListener('click', function() {
+        const templateName = this.dataset.template;
+        const subject = document.getElementById('subject_' + templateName).value;
+        // Get content from Quill editor
+        const textarea = document.getElementById('body_' + templateName);
+        const body = getRichTextContent(textarea);
+        
+        // Replace template variables with sample data
+        const previewBody = body
+            .replace(/{user_name}/g, 'John Doe')
+            .replace(/{verification_link}/g, 'https://example.com/verify?token=abc123')
+            .replace(/{reset_link}/g, 'https://example.com/reset?token=xyz789')
+            .replace(/{app_name}/g, 'Sample App')
+            .replace(/{feature_request_title}/g, 'Sample Feature Request');
+        
+        const modal = document.getElementById('preview-modal');
+        document.getElementById('preview-content').innerHTML = 
+            '<h3>Subject: ' + subject.replace(/{user_name}/g, 'John Doe') + '</h3>' +
+            '<div>' + previewBody + '</div>';
+        
+        // Move modal to body if not already there (ensures viewport positioning)
+        if (modal.parentElement !== document.body) {
+            document.body.appendChild(modal);
+        }
+        
+        modal.style.display = 'flex';
+    });
+});
+
+// Close modal
+const closeModal = document.querySelector('.close-modal');
+if (closeModal) {
+    closeModal.addEventListener('click', function() {
+        const modal = document.getElementById('preview-modal');
+        modal.style.display = 'none';
+    });
+}
+
+// Ensure modal is in body on page load
+document.addEventListener('DOMContentLoaded', function() {
+    const modal = document.getElementById('preview-modal');
+    if (modal && modal.parentElement !== document.body) {
+        document.body.appendChild(modal);
+    }
+    
+    const testModal = document.getElementById('test-email-modal');
+    if (testModal && testModal.parentElement !== document.body) {
+        document.body.appendChild(testModal);
+    }
+    
+    // Load users list for test email modal
+    loadUsersList();
+});
+
+// Load users list for dropdown
+function loadUsersList() {
+    fetch('{{ url_for("admin.users_list") }}')
+        .then(response => response.json())
+        .then(data => {
+            const select = document.getElementById('test-user-select');
+            select.innerHTML = '<option value="">Select a user...</option>';
+            
+            data.users.forEach(user => {
+                const option = document.createElement('option');
+                option.value = user.id;
+                option.textContent = `${user.name} (${user.email})`;
+                select.appendChild(option);
+            });
+            
+            // Restore last selected user from localStorage
+            const lastSelectedUserId = localStorage.getItem('lastTestEmailUserId');
+            if (lastSelectedUserId) {
+                select.value = lastSelectedUserId;
+            }
+        })
+        .catch(error => {
+            console.error('Error loading users:', error);
+            document.getElementById('test-user-select').innerHTML = '<option value="">Error loading users</option>';
+        });
+}
+
+// Test email functionality
+document.querySelectorAll('.test-template-btn').forEach(btn => {
+    btn.addEventListener('click', function() {
+        const templateName = this.dataset.template;
+        const modal = document.getElementById('test-email-modal');
+        document.getElementById('test-template-name').value = templateName;
+        
+        // Move modal to body if not already there
+        if (modal.parentElement !== document.body) {
+            document.body.appendChild(modal);
+        }
+        
+        // Restore last selected user
+        const lastSelectedUserId = localStorage.getItem('lastTestEmailUserId');
+        if (lastSelectedUserId) {
+            const select = document.getElementById('test-user-select');
+            select.value = lastSelectedUserId;
+        }
+        
+        modal.style.display = 'flex';
+    });
+});
+
+// Close test email modal
+const closeTestModal = document.querySelector('.close-test-modal');
+if (closeTestModal) {
+    closeTestModal.addEventListener('click', function() {
+        document.getElementById('test-email-modal').style.display = 'none';
+    });
+}
+
+const cancelTestBtn = document.getElementById('cancel-test-email');
+if (cancelTestBtn) {
+    cancelTestBtn.addEventListener('click', function() {
+        document.getElementById('test-email-modal').style.display = 'none';
+    });
+}
+
+// Handle test email form submission
+const testTemplateForm = document.getElementById('test-template-form');
+if (testTemplateForm) {
+    testTemplateForm.addEventListener('submit', function(e) {
+        e.preventDefault();
+        const templateName = document.getElementById('test-template-name').value;
+        const userId = document.getElementById('test-user-select').value;
+        const resultDiv = document.getElementById('test-email-result');
+        const submitBtn = this.querySelector('button[type="submit"]');
+        const cancelBtn = document.getElementById('cancel-test-email');
+        const userSelect = document.getElementById('test-user-select');
+        
+        if (!userId) {
+            resultDiv.innerHTML = '<div class="flash-message flash-error">Please select a user.</div>';
+            return;
+        }
+        
+        // Save selected user to localStorage
+        localStorage.setItem('lastTestEmailUserId', userId);
+        
+        // Show loading state
+        resultDiv.innerHTML = '<div class="flash-message flash-info sending-message"><span class="spinner"></span> Sending test email... Please wait, this may take a moment.</div>';
+        resultDiv.style.display = 'block';
+        
+        // Disable form elements during sending
+        if (submitBtn) {
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Sending...';
+        }
+        if (cancelBtn) cancelBtn.disabled = true;
+        if (userSelect) userSelect.disabled = true;
+        
+        fetch('{{ url_for("admin.test_template_email") }}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                template_name: templateName,
+                user_id: parseInt(userId)
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            // Re-enable form elements
+            if (submitBtn) {
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Send Test Email';
+            }
+            if (cancelBtn) cancelBtn.disabled = false;
+            if (userSelect) userSelect.disabled = false;
+            
+            if (data.success) {
+                resultDiv.innerHTML = '<div class="flash-message flash-success">' + data.message + '</div>';
+                // Close modal after 2 seconds
+                setTimeout(() => {
+                    document.getElementById('test-email-modal').style.display = 'none';
+                    resultDiv.innerHTML = '';
+                    resultDiv.style.display = 'none';
+                }, 2000);
+            } else {
+                resultDiv.innerHTML = '<div class="flash-message flash-error">' + data.message + '</div>';
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            // Re-enable form elements
+            if (submitBtn) {
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Send Test Email';
+            }
+            if (cancelBtn) cancelBtn.disabled = false;
+            if (userSelect) userSelect.disabled = false;
+            
+            resultDiv.innerHTML = '<div class="flash-message flash-error">Error sending test email: ' + error.message + '</div>';
+        });
+    });
+}
+
+// Update form submission to use JSON
+document.querySelectorAll('.template-form').forEach(form => {
+    form.addEventListener('submit', function(e) {
+        e.preventDefault();
+        const formData = new FormData(this);
+        const templateName = formData.get('template_name');
+        const subject = formData.get('subject');
+        // Get content from Quill editor
+        const textarea = document.getElementById('body_' + templateName);
+        const body = getRichTextContent(textarea);
+        
+        // Get all templates
+        const templates = {{ templates|tojson }};
+        templates[templateName] = {
+            subject: subject,
+            body: body
+        };
+        
+        // Send update
+        fetch('{{ url_for("admin.email_templates") }}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(templates)
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert('Template saved successfully!');
+            } else {
+                alert('Error saving template.');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Error saving template.');
+        });
+    });
+});
+</script>
+
+<style>
+.email-templates-section {
+    margin-top: 3rem;
+    padding-top: 2rem;
+    border-top: 2px solid var(--border-color);
+}
+
+.templates-accordion {
+    margin-top: 1.5rem;
+}
+
+.template-accordion-item {
+    margin-bottom: 1rem;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    background-color: var(--bg-primary);
+    overflow: hidden;
+}
+
+.template-accordion-header {
+    width: 100%;
+    padding: 1rem 1.5rem;
+    background-color: var(--bg-secondary);
+    border: none;
+    text-align: left;
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    transition: background-color 0.2s ease;
+}
+
+.template-accordion-header:hover {
+    background-color: var(--bg-tertiary);
+}
+
+.template-accordion-header.active {
+    background-color: var(--primary-color);
+    color: white;
+}
+
+.template-name {
+    flex: 1;
+}
+
+.accordion-icon {
+    font-size: 0.8rem;
+    transition: transform 0.2s ease;
+}
+
+.template-accordion-content {
+    padding: 1.5rem;
+    background-color: var(--bg-primary);
+}
+
+/* Ensure subject input has black text */
+.template-accordion-content input[type="text"] {
+    color: #000000 !important;
+}
+
+.template-accordion-content input[type="text"]::placeholder {
+    color: #999;
+}
+
+/* Modal styles - centered in viewport */
+.modal {
+    position: fixed !important;
+    z-index: 10000 !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: auto;
+    background-color: rgba(0,0,0,0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.modal-content {
+    background-color: #fefefe;
+    padding: 20px;
+    border: 1px solid #888;
+    width: 90%;
+    max-width: 800px;
+    max-height: 90vh;
+    overflow-y: auto;
+    border-radius: 8px;
+    position: relative;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    margin: auto;
+}
+
+.close-modal {
+    color: #aaa;
+    position: absolute;
+    right: 15px;
+    top: 10px;
+    font-size: 28px;
+    font-weight: bold;
+    cursor: pointer;
+    line-height: 1;
+}
+
+.close-modal:hover {
+    color: black;
+}
+
+#preview-content {
+    margin-top: 1rem;
+}
+
+#preview-content h3 {
+    margin-bottom: 1rem;
+    color: var(--text-primary);
+}
+
+#preview-content div {
+    color: var(--text-primary);
+    line-height: 1.6;
+}
+
+/* Test email modal styles */
+#test-email-modal .modal-content {
+    max-width: 500px;
+}
+
+#test-user-select {
+    width: 100%;
+    padding: 0.875rem 1rem;
+    border: 2px solid var(--border-color);
+    border-radius: var(--radius-md);
+    font-size: 1rem;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+}
+
+#test-user-select:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+}
+
+#test-email-result {
+    margin-top: 1rem;
+    min-height: 50px;
+}
+
+.sending-message {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 1rem;
+    font-weight: 500;
+}
+
+.spinner {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-radius: 50%;
+    border-top-color: white;
+    animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+#test-template-form button:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+#test-user-select:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.close-test-modal {
+    color: #aaa;
+    position: absolute;
+    right: 15px;
+    top: 10px;
+    font-size: 28px;
+    font-weight: bold;
+    cursor: pointer;
+    line-height: 1;
+}
+
+.close-test-modal:hover {
+    color: black;
+}
+
+.btn-info {
+    background: linear-gradient(135deg, var(--info-color), #2563eb);
+    color: white;
+    border: none;
+    padding: 0.75rem 1.5rem;
+    border-radius: var(--radius-md);
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.btn-info:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(59, 130, 246, 0.3);
+}
+</style>
+{% endblock %}
+

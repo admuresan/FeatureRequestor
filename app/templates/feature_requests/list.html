@@ -1,0 +1,175 @@
+{% extends "base.html" %}
+
+{% block title %}Feature Requests - Feature Requestor{% endblock %}
+
+{% block content %}
+<div class="feature-requests-page">
+    <h1>Feature Requests</h1>
+    
+    {% if error_message %}
+        <div class="error-message">{{ error_message }}</div>
+    {% endif %}
+    
+    <div class="filters">
+        <form method="GET" class="filter-form" style="display: flex; flex-direction: row; align-items: center; gap: 0.75rem; flex-wrap: nowrap;">
+            <label for="app_filter" style="display: inline-block; margin: 0; padding: 0; white-space: nowrap; font-weight: 600;">Filter by App:</label>
+            <select id="app_filter" name="app" onchange="this.form.submit()" style="display: inline-block; padding: 0.75rem 1rem; border: 2px solid var(--border-color); border-radius: var(--radius-md); font-size: 1rem; min-width: 150px;">
+                <option value="">All Apps</option>
+                {% for app in all_apps %}
+                    <option value="{{ app.app_name }}" {% if current_app and current_app.id == app.id %}selected{% endif %}>
+                        {{ app.app_display_name }}
+                    </option>
+                {% endfor %}
+            </select>
+            <label for="search" style="display: inline-block; margin: 0; padding: 0; white-space: nowrap; font-weight: 600;">Search:</label>
+            <input type="text" id="search" name="search" value="{{ search_query }}" placeholder="Search requests..." style="display: inline-block; padding: 0.75rem 1rem; border: 2px solid var(--border-color); border-radius: var(--radius-md); font-size: 1rem; min-width: 150px;">
+            <button type="submit" style="display: inline-block; padding: 0.75rem 1.5rem; white-space: nowrap;">Search</button>
+        </form>
+    </div>
+    
+    <div class="request-sections">
+        <section class="request-section collapsible-section" data-section="in_progress">
+            <div class="section-header" onclick="toggleSection('in_progress')">
+                <h2>Currently Being Worked On</h2>
+                <span class="toggle-icon" id="icon_in_progress">▼</span>
+            </div>
+            <div class="section-controls" id="controls_in_progress">
+                <label for="order_in_progress">Order by:</label>
+                <select id="order_in_progress" onchange="changeOrder('in_progress', this.value)">
+                    <option value="projected_completion_date_desc" {% if in_progress_order == 'projected_completion_date_desc' %}selected{% endif %}>Projected Completion (Newest)</option>
+                    <option value="projected_completion_date_asc" {% if in_progress_order == 'projected_completion_date_asc' %}selected{% endif %}>Projected Completion (Oldest)</option>
+                    <option value="total_bid_amount_desc" {% if in_progress_order == 'total_bid_amount_desc' %}selected{% endif %}>Bid Amount (Highest)</option>
+                    <option value="total_bid_amount_asc" {% if in_progress_order == 'total_bid_amount_asc' %}selected{% endif %}>Bid Amount (Lowest)</option>
+                    <option value="date_requested_desc" {% if in_progress_order == 'date_requested_desc' %}selected{% endif %}>Date Requested (Newest)</option>
+                    <option value="date_requested_asc" {% if in_progress_order == 'date_requested_asc' %}selected{% endif %}>Date Requested (Oldest)</option>
+                </select>
+            </div>
+            <div class="request-list" id="content_in_progress">
+                {% for request in in_progress.items %}
+                    <div class="request-card">
+                        <div class="request-card-content">
+                            <h3><a href="{{ url_for('feature_requests.detail', request_id=request.id) }}">{{ request.title }}</a></h3>
+                            <div class="request-meta">
+                                <span>{{ request.app.app_display_name }}</span> |
+                                <span>{{ request.request_category }}</span> |
+                                <span>{{ request.request_type }}</span>
+                                {% if request.date_requested %}
+                                    | <span>{{ request.date_requested.strftime('%Y-%m-%d') }}</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="request-bid">{{ format_currency(get_converted_total(request), viewing_currency) }}</div>
+                    </div>
+                {% else %}
+                    <p>No requests in progress.</p>
+                {% endfor %}
+            </div>
+        </section>
+        
+        <section class="request-section collapsible-section collapsed" data-section="requested">
+            <div class="section-header" onclick="toggleSection('requested')">
+                <h2>Requested Features</h2>
+                <span class="toggle-icon" id="icon_requested">▶</span>
+            </div>
+            <div class="section-controls" id="controls_requested" style="display:none;">
+                <label for="order_requested">Order by:</label>
+                <select id="order_requested" onchange="changeOrder('requested', this.value)">
+                    <option value="total_bid_amount_desc" {% if requested_order == 'total_bid_amount_desc' %}selected{% endif %}>Bid Amount (Highest)</option>
+                    <option value="total_bid_amount_asc" {% if requested_order == 'total_bid_amount_asc' %}selected{% endif %}>Bid Amount (Lowest)</option>
+                    <option value="date_requested_desc" {% if requested_order == 'date_requested_desc' %}selected{% endif %}>Date Requested (Newest)</option>
+                    <option value="date_requested_asc" {% if requested_order == 'date_requested_asc' %}selected{% endif %}>Date Requested (Oldest)</option>
+                    <option value="title_asc" {% if requested_order == 'title_asc' %}selected{% endif %}>Title (A-Z)</option>
+                    <option value="title_desc" {% if requested_order == 'title_desc' %}selected{% endif %}>Title (Z-A)</option>
+                </select>
+            </div>
+            <div class="request-list" id="content_requested" style="display:none;">
+                {% for request in requested.items %}
+                    <div class="request-card">
+                        <div class="request-card-content">
+                            <h3><a href="{{ url_for('feature_requests.detail', request_id=request.id) }}">{{ request.title }}</a></h3>
+                            <div class="request-meta">
+                                <span>{{ request.app.app_display_name }}</span> |
+                                <span>{{ request.request_category }}</span> |
+                                <span>{{ request.request_type }}</span>
+                                {% if request.date_requested %}
+                                    | <span>{{ request.date_requested.strftime('%Y-%m-%d') }}</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="request-bid">{{ format_currency(get_converted_total(request), viewing_currency) }}</div>
+                    </div>
+                {% else %}
+                    <p>No requested features.</p>
+                {% endfor %}
+            </div>
+        </section>
+        
+        <section class="request-section collapsible-section collapsed" data-section="completed">
+            <div class="section-header" onclick="toggleSection('completed')">
+                <h2>Completed Features</h2>
+                <span class="toggle-icon" id="icon_completed">▶</span>
+            </div>
+            <div class="section-controls" id="controls_completed" style="display:none;">
+                <label for="order_completed">Order by:</label>
+                <select id="order_completed" onchange="changeOrder('completed', this.value)">
+                    <option value="delivered_date_desc" {% if completed_order == 'delivered_date_desc' %}selected{% endif %}>Delivered Date (Newest)</option>
+                    <option value="delivered_date_asc" {% if completed_order == 'delivered_date_asc' %}selected{% endif %}>Delivered Date (Oldest)</option>
+                    <option value="total_bid_amount_desc" {% if completed_order == 'total_bid_amount_desc' %}selected{% endif %}>Bid Amount (Highest)</option>
+                    <option value="total_bid_amount_asc" {% if completed_order == 'total_bid_amount_asc' %}selected{% endif %}>Bid Amount (Lowest)</option>
+                    <option value="date_requested_desc" {% if completed_order == 'date_requested_desc' %}selected{% endif %}>Date Requested (Newest)</option>
+                    <option value="date_requested_asc" {% if completed_order == 'date_requested_asc' %}selected{% endif %}>Date Requested (Oldest)</option>
+                </select>
+            </div>
+            <div class="request-list" id="content_completed" style="display:none;">
+                {% for request in completed.items %}
+                    <div class="request-card">
+                        <div class="request-card-content">
+                            <h3><a href="{{ url_for('feature_requests.detail', request_id=request.id) }}">{{ request.title }}</a></h3>
+                            <div class="request-meta">
+                                <span>{{ request.app.app_display_name }}</span> |
+                                <span>{{ request.request_category }}</span> |
+                                <span>{{ request.request_type }}</span>
+                                {% if request.date_requested %}
+                                    | <span>{{ request.date_requested.strftime('%Y-%m-%d') }}</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="request-bid">{{ format_currency(get_converted_total(request), viewing_currency) }}</div>
+                    </div>
+                {% else %}
+                    <p>No completed features.</p>
+                {% endfor %}
+            </div>
+        </section>
+    </div>
+</div>
+
+<script>
+function toggleSection(sectionName) {
+    const content = document.getElementById('content_' + sectionName);
+    const controls = document.getElementById('controls_' + sectionName);
+    const icon = document.getElementById('icon_' + sectionName);
+    const section = document.querySelector(`[data-section="${sectionName}"]`);
+    
+    if (content.style.display === 'none') {
+        content.style.display = 'block';
+        controls.style.display = 'block';
+        icon.textContent = '▼';
+        section.classList.remove('collapsed');
+    } else {
+        content.style.display = 'none';
+        controls.style.display = 'none';
+        icon.textContent = '▶';
+        section.classList.add('collapsed');
+    }
+}
+
+function changeOrder(sectionName, orderValue) {
+    // Reload page with order parameter
+    const url = new URL(window.location);
+    url.searchParams.set(`${sectionName}_order`, orderValue);
+    window.location = url.toString();
+}
+</script>
+{% endblock %}
+

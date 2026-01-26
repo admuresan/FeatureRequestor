@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+
+{% block title %}Create Feature Request - Feature Requestor{% endblock %}
+
+{% block content %}
+<div class="create-request">
+    <h1>Create Feature Request</h1>
+    
+    {% if not current_user.email_verified %}
+        <div class="alert alert-warning" style="margin-bottom: 1rem; padding: 1rem; background: #fff3cd; border: 1px solid #ffc107; border-radius: 4px;">
+            <p style="margin: 0 0 0.5rem 0;"><strong>Email verification required</strong></p>
+            <p style="margin: 0;">Please verify your email address before creating feature requests.</p>
+            <p style="margin: 0.5rem 0 0 0;"><a href="{{ url_for('account.settings') }}">Go to account settings to verify your email</a></p>
+        </div>
+    {% endif %}
+    
+    {% if similar_requests %}
+        <div class="similar-requests-warning">
+            <h2>Similar Requests Found</h2>
+            <p>We found {{ similar_requests|length }} similar request(s). Please review them to avoid duplicates:</p>
+            <ul>
+                {% for req, score in similar_requests %}
+                    <li>
+                        <a href="{{ url_for('feature_requests.detail', request_id=req.id) }}" target="_blank">
+                            {{ req.title }}
+                        </a>
+                        <span class="similarity-score">({{ "%.0f"|format(score * 100) }}% similar)</span>
+                        {% if current_user.email_verified %}
+                            <form method="POST" action="{{ url_for('feature_requests.tag_onto', request_id=req.id) }}" style="display:inline;">
+                                <input type="hidden" name="comment" value="{{ form_data.comment if form_data else '' }}">
+                                <button type="submit" class="btn btn-sm">Tag onto this request</button>
+                            </form>
+                        {% else %}
+                            <span class="text-muted" style="font-size: 0.9rem;">(Email verification required to tag onto requests)</span>
+                        {% endif %}
+                    </li>
+                {% endfor %}
+            </ul>
+            <p>If none of these match, you can continue creating a new request below.</p>
+        </div>
+    {% endif %}
+    
+    <form method="POST" action="{{ url_for('feature_requests.create') }}">
+        <div class="form-group">
+            <label for="app_id">App:</label>
+            <select id="app_id" name="app_id" required>
+                <option value="">Select an app...</option>
+                {% for app in apps %}
+                    <option value="{{ app.id }}">{{ app.app_display_name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="title">Title:</label>
+            <input type="text" id="title" name="title" value="{{ form_data.title if form_data else '' }}" required>
+        </div>
+        <div class="form-group">
+            <label for="request_type">Request Type:</label>
+            <select id="request_type" name="request_type" required>
+                <option value="">Select...</option>
+                <option value="UI/UX">UI/UX</option>
+                <option value="backend">Backend</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="request_category">Request Category:</label>
+            <select id="request_category" name="request_category" required>
+                <option value="">Select...</option>
+                <option value="bug">Bug</option>
+                <option value="enhancement">Enhancement</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="comment">Description:</label>
+            <textarea id="comment" name="comment" class="rich-text-editor" data-height="300px" required {% if not current_user.email_verified %}disabled{% endif %}>{{ form_data.comment if form_data else '' }}</textarea>
+        </div>
+        {% if current_user.email_verified %}
+            <button type="submit" class="btn btn-primary">Create Request</button>
+        {% else %}
+            <button type="button" class="btn btn-primary" disabled title="Please verify your email address to create feature requests">Create Request</button>
+            <p class="text-muted" style="margin-top: 0.5rem; font-size: 0.9rem;">Please verify your email address to create feature requests.</p>
+        {% endif %}
+    </form>
+    
+    <div class="best-practices-guide">
+        <h2>Best Practices for Feature Requests</h2>
+        <ul>
+            <li><strong>Be specific:</strong> Clearly describe what you want to achieve</li>
+            <li><strong>Provide context:</strong> Explain why this feature is needed</li>
+            <li><strong>Include examples:</strong> Show how the feature would be used</li>
+            <li><strong>Check existing requests:</strong> Review similar requests to avoid duplicates</li>
+            <li><strong>Use clear language:</strong> Write in a way that's easy to understand</li>
+            <li><strong>Add details:</strong> Include any relevant technical requirements or constraints</li>
+        </ul>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    // Rich text editor is automatically initialized by rich-text-editor.js
+</script>
+{% endblock %}
+

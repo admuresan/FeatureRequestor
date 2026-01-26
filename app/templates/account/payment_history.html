@@ -1,0 +1,501 @@
+{% extends "base.html" %}
+
+{% block title %}Payment History - Feature Requestor{% endblock %}
+
+{% block content %}
+<div class="payment-history">
+    <h1>Payment History</h1>
+    
+    {% if current_user.role == 'requester' %}
+        {# Requester view: Show payments they made #}
+        <div class="payment-section">
+            <div class="section-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                <h2>Payments Made</h2>
+                <button class="btn btn-primary" onclick="openReceiptModal()">Generate Receipt</button>
+            </div>
+            
+            {% if totals_by_currency %}
+                <div class="payment-totals" style="margin-bottom: 2rem; padding: 1rem; background-color: #f8f9fa; border-radius: 8px;">
+                    <h3>Summary by Currency</h3>
+                    {% for currency, total in totals_by_currency.items() %}
+                        <p><strong>Total in {{ currency }}:</strong> {{ currency }}{{ "%.2f"|format(total) }}</p>
+                    {% endfor %}
+                </div>
+            {% endif %}
+            
+            {% if transactions %}
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Type</th>
+                            <th>Direction</th>
+                            <th>Amount</th>
+                            <th>Currency</th>
+                            <th>App</th>
+                            <th>Feature Request</th>
+                            <th>Stripe Transaction ID</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for transaction in transactions %}
+                            <tr>
+                                <td>{{ transaction.transaction_date.strftime('%Y-%m-%d %H:%M') }}</td>
+                                <td>{{ transaction.transaction_type }}</td>
+                                <td>
+                                    {% if transaction.direction == 'charged' %}
+                                        <span style="color: #e74c3c;">Charged (Outgoing)</span>
+                                    {% elif transaction.direction == 'tip' %}
+                                        <span style="color: #f39c12;">Tip</span>
+                                    {% else %}
+                                        {{ transaction.direction }}
+                                    {% endif %}
+                                </td>
+                                <td>{{ "%.2f"|format(transaction.amount) }}</td>
+                                <td>{{ transaction.currency }}</td>
+                                <td>
+                                    {% if transaction.app %}
+                                        <a href="{{ url_for('apps.detail', app_name=transaction.app.app_name) }}">{{ transaction.app.app_display_name }}</a>
+                                    {% else %}
+                                        N/A
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if transaction.feature_request %}
+                                        <a href="{{ url_for('feature_requests.detail', request_id=transaction.feature_request.id) }}">{{ transaction.feature_request.title[:50] }}{% if transaction.feature_request.title|length > 50 %}...{% endif %}</a>
+                                    {% else %}
+                                        N/A
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if transaction.stripe_transaction_id %}
+                                        <small>{{ transaction.stripe_transaction_id }}</small>
+                                    {% else %}
+                                        N/A
+                                    {% endif %}
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            {% else %}
+                <p>No payment transactions found.</p>
+            {% endif %}
+        </div>
+    {% else %}
+        {# Dev view: Show two sections - Received and Paid #}
+        <div class="payment-section" style="margin-bottom: 3rem;">
+            <div class="section-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                <h2>Received Payments</h2>
+                <button class="btn btn-primary" onclick="openPaystubModal('received')">Generate Paystub</button>
+            </div>
+            
+            {% if received_totals %}
+                <div class="payment-totals" style="margin-bottom: 2rem; padding: 1rem; background-color: #f8f9fa; border-radius: 8px;">
+                    <h3>Summary by Currency</h3>
+                    {% for currency, total in received_totals.items() %}
+                        <p><strong>Total in {{ currency }}:</strong> {{ currency }}{{ "%.2f"|format(total) }}</p>
+                    {% endfor %}
+                </div>
+            {% endif %}
+            
+            {% if received_transactions %}
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Type</th>
+                            <th>Amount</th>
+                            <th>Currency</th>
+                            <th>App</th>
+                            <th>Feature Request</th>
+                            <th>Stripe Transaction ID</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for transaction in received_transactions %}
+                            <tr>
+                                <td>{{ transaction.transaction_date.strftime('%Y-%m-%d %H:%M') }}</td>
+                                <td>{{ transaction.transaction_type }}</td>
+                                <td style="color: #27ae60;">{{ "%.2f"|format(transaction.amount) }}</td>
+                                <td>{{ transaction.currency }}</td>
+                                <td>
+                                    {% if transaction.app %}
+                                        <a href="{{ url_for('apps.detail', app_name=transaction.app.app_name) }}">{{ transaction.app.app_display_name }}</a>
+                                    {% else %}
+                                        N/A
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if transaction.feature_request %}
+                                        <a href="{{ url_for('feature_requests.detail', request_id=transaction.feature_request.id) }}">{{ transaction.feature_request.title[:50] }}{% if transaction.feature_request.title|length > 50 %}...{% endif %}</a>
+                                    {% else %}
+                                        N/A
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if transaction.stripe_transaction_id %}
+                                        <small>{{ transaction.stripe_transaction_id }}</small>
+                                    {% else %}
+                                        N/A
+                                    {% endif %}
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            {% else %}
+                <p>No received payments found.</p>
+            {% endif %}
+        </div>
+        
+        <div class="payment-section">
+            <div class="section-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                <h2>Payments Made</h2>
+                <button class="btn btn-primary" onclick="openReceiptModal()">Generate Receipt</button>
+            </div>
+            
+            {% if paid_totals %}
+                <div class="payment-totals" style="margin-bottom: 2rem; padding: 1rem; background-color: #f8f9fa; border-radius: 8px;">
+                    <h3>Summary by Currency</h3>
+                    {% for currency, total in paid_totals.items() %}
+                        <p><strong>Total in {{ currency }}:</strong> {{ currency }}{{ "%.2f"|format(total) }}</p>
+                    {% endfor %}
+                </div>
+            {% endif %}
+            
+            {% if paid_transactions %}
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Type</th>
+                            <th>Direction</th>
+                            <th>Amount</th>
+                            <th>Currency</th>
+                            <th>App</th>
+                            <th>Feature Request</th>
+                            <th>Stripe Transaction ID</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for transaction in paid_transactions %}
+                            <tr>
+                                <td>{{ transaction.transaction_date.strftime('%Y-%m-%d %H:%M') }}</td>
+                                <td>{{ transaction.transaction_type }}</td>
+                                <td>
+                                    {% if transaction.direction == 'charged' %}
+                                        <span style="color: #e74c3c;">Charged (Outgoing)</span>
+                                    {% elif transaction.direction == 'tip' %}
+                                        <span style="color: #f39c12;">Tip</span>
+                                    {% else %}
+                                        {{ transaction.direction }}
+                                    {% endif %}
+                                </td>
+                                <td>{{ "%.2f"|format(transaction.amount) }}</td>
+                                <td>{{ transaction.currency }}</td>
+                                <td>
+                                    {% if transaction.app %}
+                                        <a href="{{ url_for('apps.detail', app_name=transaction.app.app_name) }}">{{ transaction.app.app_display_name }}</a>
+                                    {% else %}
+                                        N/A
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if transaction.feature_request %}
+                                        <a href="{{ url_for('feature_requests.detail', request_id=transaction.feature_request.id) }}">{{ transaction.feature_request.title[:50] }}{% if transaction.feature_request.title|length > 50 %}...{% endif %}</a>
+                                    {% else %}
+                                        N/A
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if transaction.stripe_transaction_id %}
+                                        <small>{{ transaction.stripe_transaction_id }}</small>
+                                    {% else %}
+                                        N/A
+                                    {% endif %}
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            {% else %}
+                <p>No payments made found.</p>
+            {% endif %}
+        </div>
+    {% endif %}
+</div>
+
+<!-- Receipt Modal -->
+<div id="receipt-modal" class="modal" style="display:none;">
+    <div class="modal-content">
+        <span class="close-modal" onclick="closeReceiptModal()">&times;</span>
+        <h2>Generate Receipt</h2>
+        <form id="receipt-form" onsubmit="generateReceipt(event)">
+            <div class="form-group">
+                <label for="receipt-start-date">Start Date:</label>
+                <input type="date" id="receipt-start-date" name="start_date" required>
+            </div>
+            <div class="form-group">
+                <label for="receipt-end-date">End Date:</label>
+                <input type="date" id="receipt-end-date" name="end_date" required>
+            </div>
+            <div class="modal-actions">
+                <button type="submit" class="btn btn-primary">Generate Receipt (PDF)</button>
+                <button type="button" class="btn btn-secondary modal-cancel" onclick="closeReceiptModal()">Cancel</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Paystub Modal -->
+<div id="paystub-modal" class="modal" style="display:none;">
+    <div class="modal-content">
+        <span class="close-modal" onclick="closePaystubModal()">&times;</span>
+        <h2>Generate Paystub</h2>
+        <form id="paystub-form" onsubmit="generatePaystub(event)">
+            <div class="form-group">
+                <label for="paystub-start-date">Start Date:</label>
+                <input type="date" id="paystub-start-date" name="start_date" required>
+            </div>
+            <div class="form-group">
+                <label for="paystub-end-date">End Date:</label>
+                <input type="date" id="paystub-end-date" name="end_date" required>
+            </div>
+            <div class="modal-actions">
+                <button type="submit" class="btn btn-primary">Generate Paystub (PDF)</button>
+                <button type="button" class="btn btn-secondary modal-cancel" onclick="closePaystubModal()">Cancel</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+function openReceiptModal() {
+    document.getElementById('receipt-modal').style.display = 'block';
+}
+
+function closeReceiptModal() {
+    document.getElementById('receipt-modal').style.display = 'none';
+    document.getElementById('receipt-form').reset();
+}
+
+function openPaystubModal(type) {
+    document.getElementById('paystub-modal').style.display = 'block';
+}
+
+function closePaystubModal() {
+    document.getElementById('paystub-modal').style.display = 'none';
+    document.getElementById('paystub-form').reset();
+}
+
+function generateReceipt(event) {
+    event.preventDefault();
+    const form = event.target;
+    const formData = new FormData(form);
+    const startDate = formData.get('start_date');
+    const endDate = formData.get('end_date');
+    
+    if (!startDate || !endDate) {
+        alert('Please select both start and end dates.');
+        return;
+    }
+    
+    // Disable the submit button and show loading state
+    const submitBtn = form.querySelector('button[type="submit"]');
+    const originalText = submitBtn.textContent;
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Generating...';
+    
+    // Use fetch to download the PDF
+    fetch('{{ url_for("account.generate_receipt_pdf") }}', {
+        method: 'POST',
+        body: formData,
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest'
+        }
+    })
+    .then(response => {
+        if (!response.ok) {
+            // Check content type to determine how to parse
+            const contentType = response.headers.get('content-type');
+            if (contentType && contentType.includes('application/json')) {
+                return response.json().then(data => {
+                    throw new Error(data.error || 'Error generating receipt');
+                });
+            } else {
+                // Clone before reading text to avoid consuming the original response
+                return response.clone().text().then(text => {
+                    throw new Error(text || 'Error generating receipt');
+                });
+            }
+        }
+        return response.blob();
+    })
+    .then(blob => {
+        // Create a download link and trigger it
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `receipt_${startDate}_to_${endDate}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+        
+        // Close modal after download starts
+        closeReceiptModal();
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Error generating receipt. Please try again.');
+        submitBtn.disabled = false;
+        submitBtn.textContent = originalText;
+    });
+}
+
+function generatePaystub(event) {
+    event.preventDefault();
+    const form = event.target;
+    const formData = new FormData(form);
+    const startDate = formData.get('start_date');
+    const endDate = formData.get('end_date');
+    
+    if (!startDate || !endDate) {
+        alert('Please select both start and end dates.');
+        return;
+    }
+    
+    // Disable the submit button and show loading state
+    const submitBtn = form.querySelector('button[type="submit"]');
+    const originalText = submitBtn.textContent;
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Generating...';
+    
+    // Use fetch to download the PDF
+    fetch('{{ url_for("account.generate_paystub_pdf") }}', {
+        method: 'POST',
+        body: formData,
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest'
+        }
+    })
+    .then(response => {
+        if (!response.ok) {
+            // Check content type to determine how to parse
+            const contentType = response.headers.get('content-type');
+            if (contentType && contentType.includes('application/json')) {
+                return response.json().then(data => {
+                    throw new Error(data.error || 'Error generating paystub');
+                });
+            } else {
+                // Clone before reading text to avoid consuming the original response
+                return response.clone().text().then(text => {
+                    throw new Error(text || 'Error generating paystub');
+                });
+            }
+        }
+        return response.blob();
+    })
+    .then(blob => {
+        // Create a download link and trigger it
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `paystub_${startDate}_to_${endDate}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+        
+        // Close modal after download starts
+        closePaystubModal();
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Error generating paystub. Please try again.');
+        submitBtn.disabled = false;
+        submitBtn.textContent = originalText;
+    });
+}
+
+</script>
+
+<style>
+#receipt-modal.modal,
+#paystub-modal.modal {
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    overflow: auto;
+    background-color: rgba(0,0,0,0.5);
+}
+
+#receipt-modal .modal-content,
+#paystub-modal .modal-content {
+    background-color: #fefefe;
+    margin: 5% auto;
+    padding: 20px;
+    border: 1px solid #888;
+    width: 80%;
+    max-width: 500px;
+    border-radius: 8px;
+    position: relative;
+}
+
+#receipt-modal .close-modal,
+#paystub-modal .close-modal {
+    color: #aaa;
+    float: right;
+    font-size: 28px;
+    font-weight: bold;
+    cursor: pointer;
+    line-height: 1;
+}
+
+#receipt-modal .close-modal:hover,
+#receipt-modal .close-modal:focus,
+#paystub-modal .close-modal:hover,
+#paystub-modal .close-modal:focus {
+    color: black;
+}
+
+#receipt-modal .form-group,
+#paystub-modal .form-group {
+    margin-bottom: 1.5rem;
+}
+
+#receipt-modal .form-group label,
+#paystub-modal .form-group label {
+    display: block;
+    margin-bottom: 0.5rem;
+    font-weight: 500;
+    color: var(--text-primary);
+}
+
+#receipt-modal .form-group input[type="date"],
+#paystub-modal .form-group input[type="date"] {
+    width: 100%;
+    padding: 0.5rem;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    font-size: 1rem;
+}
+
+#receipt-modal .modal-actions,
+#paystub-modal .modal-actions {
+    display: flex;
+    gap: 1rem;
+    margin-top: 1.5rem;
+    justify-content: flex-end;
+}
+
+.section-header {
+    border-bottom: 2px solid #e0e0e0;
+    padding-bottom: 0.5rem;
+}
+</style>
+{% endblock %}

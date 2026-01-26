@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+
+{% block title %}Edit App - Admin{% endblock %}
+
+{% block content %}
+<div class="admin-app-edit">
+    <h1>Edit App: {{ app.app_display_name }}</h1>
+    <form method="POST" action="{{ url_for('admin.edit_app', app_id=app.id) }}" enctype="multipart/form-data">
+        <div class="form-group">
+            <label>App Name (cannot be changed):</label>
+            <input type="text" value="{{ app.app_name }}" disabled>
+        </div>
+        <div class="form-group">
+            <label for="app_display_name">Display Name:</label>
+            <input type="text" id="app_display_name" name="app_display_name" value="{{ app.app_display_name }}" required>
+        </div>
+        <div class="form-group">
+            <label for="app_description">Description:</label>
+            <textarea id="app_description" name="app_description">{{ app.app_description or '' }}</textarea>
+        </div>
+        <div class="form-group">
+            <label for="app_url">App URL:</label>
+            <input type="url" id="app_url" name="app_url" value="{{ app.app_url or '' }}">
+        </div>
+        <div class="form-group">
+            <label for="github_url">GitHub URL:</label>
+            <input type="url" id="github_url" name="github_url" value="{{ app.github_url or '' }}">
+        </div>
+        <div class="form-group">
+            <label for="icon">App Icon:</label>
+            <div style="display: flex; align-items: center; gap: 1rem;">
+                <input type="file" id="icon" name="icon" accept="image/*" style="flex: 1;">
+                {% if app.app_url %}
+                    <button type="button" class="btn btn-secondary" onclick="document.getElementById('fetch-icon-form').submit();">Get Icon from Site</button>
+                {% endif %}
+            </div>
+            {% if app.icon_path %}
+                <p style="margin-top: 0.5rem;">Current icon: <img src="{{ url_for('admin.serve_upload', filename=app.icon_path.split('/')[-1]) }}" alt="App icon" style="max-width: 32px; max-height: 32px;"></p>
+            {% endif %}
+        </div>
+        <button type="submit" class="btn btn-primary">Update App</button>
+        <a href="{{ url_for('admin.apps') }}" class="btn">Cancel</a>
+    </form>
+    {% if app.app_url %}
+        <form id="fetch-icon-form" method="POST" action="{{ url_for('admin.fetch_app_icon', app_id=app.id) }}" style="display: none;">
+        </form>
+    {% endif %}
+</div>
+{% endblock %}
+

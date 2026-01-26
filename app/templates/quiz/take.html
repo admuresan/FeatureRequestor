@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+
+{% block title %}Rules & Quiz - Feature Requestor{% endblock %}
+
+{% block content %}
+<div class="quiz-page">
+    <h1>Rules & Process Quiz</h1>
+    <p>Before you can complete your sign-up, please read the rules and answer the following questions to demonstrate your understanding of how the Feature Requestor platform works.</p>
+    
+    <div class="rules-section">
+        <h2>Key Rules & Process</h2>
+        <ul>
+            <li><strong>Payments:</strong> When you place a bid, no payment is collected immediately. Payment is only collected when the request is confirmed by the required percentage of requesters (default 80%).</li>
+            <li><strong>Fees:</strong> Stripe fees are calculated on the total bid amount and distributed proportionally among all requesters who placed non-zero bids. Each requester pays their original bid plus their share of fees.</li>
+            <li><strong>Confirmation:</strong> After a developer marks a request as completed, requesters who placed bids must confirm it. Once the confirmation threshold is met, payments are processed.</li>
+            <li><strong>Developers:</strong> Developers receive the full bid amount (including fees) split according to payment ratios when multiple developers work on a request.</li>
+        </ul>
+    </div>
+    
+    <form method="POST" action="{{ url_for('quiz.take_quiz', signup_request_id=signup_request_id) }}">
+        {% for question in questions %}
+            <div class="quiz-question">
+                <h3>Question {{ loop.index }}: {{ question.question }}</h3>
+                {% for option in question.options %}
+                    <div class="form-group">
+                        <label>
+                            <input type="radio" name="question_{{ question.id }}" value="{{ loop.index0 }}" required>
+                            {{ option }}
+                        </label>
+                    </div>
+                {% endfor %}
+            </div>
+        {% endfor %}
+        
+        <button type="submit" class="btn btn-primary">Submit Answers</button>
+    </form>
+</div>
+{% endblock %}
+

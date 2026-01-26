@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+
+{% block title %}Data Viewer - Admin{% endblock %}
+
+{% block content %}
+<div class="admin-data-viewer">
+    <h1>Database Data Viewer</h1>
+    <p>View raw database tables. Sensitive data (passwords, Stripe IDs, tokens) is masked with ***</p>
+    
+    <div class="table-selector">
+        <h2>Select Table</h2>
+        <form method="GET" action="{{ url_for('admin.data_viewer') }}">
+            <select name="table" onchange="this.form.submit()">
+                <option value="">-- Select a table --</option>
+                {% for table in all_tables %}
+                    <option value="{{ table }}" {% if current_table == table %}selected{% endif %}>{{ table }}</option>
+                {% endfor %}
+            </select>
+        </form>
+    </div>
+    
+    {% if table_data %}
+        <div class="table-data">
+            <h2>Table: {{ current_table }}</h2>
+            <p><small>Showing up to 100 rows</small></p>
+            <div class="table-wrapper">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            {% for col in columns %}
+                                <th>{{ col }}</th>
+                            {% endfor %}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in table_data %}
+                            <tr>
+                                {% for col in columns %}
+                                    <td>{{ row[col] }}</td>
+                                {% endfor %}
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    {% endif %}
+</div>
+{% endblock %}
+

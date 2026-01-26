@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+
+{% block title %}Tip {{ app.app_display_name }} - Feature Requestor{% endblock %}
+
+{% block content %}
+<div class="tip-jar">
+    <h1>Tip {{ app.app_display_name }}</h1>
+    <p>Show your appreciation for this app by leaving a tip!</p>
+    
+    <form method="POST" action="{{ url_for('apps.tip_jar', app_name=app.app_name) }}">
+        <div class="form-group">
+            <label for="amount">Tip Amount (CAD):</label>
+            <input type="number" id="amount" name="amount" min="{{ minimum_tip }}" step="0.01" value="{{ minimum_tip }}" required>
+            <small>Minimum tip amount is ${{ "%.2f"|format(minimum_tip) }} to cover Stripe processing fees (2.9% + $0.30).</small>
+        </div>
+        
+        {% if not current_user.is_authenticated %}
+            <div class="form-group">
+                <label for="email">Email (optional, for receipt):</label>
+                <input type="email" id="email" name="email">
+            </div>
+            <p><small>You'll be redirected to Stripe Checkout to complete the payment.</small></p>
+        {% else %}
+            <p><small>Payment will be processed through your connected Stripe account.</small></p>
+        {% endif %}
+        
+        <button type="submit" class="btn btn-primary">Send Tip</button>
+        <a href="{{ url_for('apps.detail', app_name=app.app_name) }}" class="btn">Cancel</a>
+    </form>
+</div>
+{% endblock %}
+

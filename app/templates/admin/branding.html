@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+
+{% block title %}Branding - Admin{% endblock %}
+
+{% block content %}
+<div class="admin-branding">
+    <h1>Branding Management</h1>
+    <form method="POST" action="{{ url_for('admin.branding') }}" enctype="multipart/form-data">
+        <div class="form-group">
+            <label for="icon">Feature Requestor Icon/Logo:</label>
+            <input type="file" id="icon" name="icon" accept="image/*">
+            <small>Upload an icon file (PNG recommended). Used as favicon and throughout the UI.</small>
+        </div>
+        {% if has_icon %}
+            <div class="current-icon" style="margin: 1rem 0;">
+                <p><strong>Current icon:</strong></p>
+                <img src="{{ url_for('admin.serve_icon') }}" alt="Current icon" style="max-width: 200px; max-height: 200px; border: 1px solid #ddd; padding: 0.5rem; border-radius: 4px;">
+            </div>
+        {% else %}
+            <p style="color: #666; margin: 1rem 0;">No icon is currently set.</p>
+        {% endif %}
+        <button type="submit" class="btn btn-primary">Upload Icon</button>
+    </form>
+</div>
+{% endblock %}
+
