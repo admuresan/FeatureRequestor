@@ -1,0 +1,1314 @@
+# Feature Requestor Application - Requirements Document
+
+**IMPORTANT: Read `instructions/architecture` file before implementing anything.**
+
+## Overview
+
+This is a feature requesting application that provides an endpoint for other applications to call. The endpoint opens a new tab displaying the feature requests page for the calling application.
+
+## Core Functionality
+
+### External Endpoint
+
+- **Purpose**: Provide an endpoint that other applications can call to open the feature requests page
+- **HTTP Method**: POST (accepts JSON payload)
+- **Endpoint URL**: `/api/open-requests` (or similar, configurable)
+- **Payload Format**: JSON
+  - Structure: `{"app_name": "my-app-name"}`
+  - `app_name` is the internal app name (URL-safe identifier)
+- **Behavior**: 
+  - Accepts JSON payload containing an app name
+  - Validates the payload and app name
+  - Redirects to the feature requests page filtered for that app
+  - The feature requests page is publicly accessible (no authentication required to view)
+  - App pages are not specific implementations but rather filtered versions of a generic app page
+  - If the app name is not found in the payload or is invalid, redirect to feature requests page showing all requests with a message indicating "app name not found"
+- **Response**: HTTP 302 redirect to `/feature-requests?app={app_name}` (or similar URL structure)
+- **CORS**: Should support CORS headers for cross-origin requests from other applications
+- **Error Handling**: 
+  - Invalid JSON: Return 400 Bad Request
+  - Missing app_name: Return 400 Bad Request
+  - App not found: Still redirect but show "app name not found" message on the page
+
+### Feature Requests Page
+
+- **Public page** - accessible without authentication
+- Sign in/Sign up button displayed at the top of the page
+- Users can view all feature requests without signing in
+- Actions that require authentication (add comment, place bid, create request) redirect to sign-in/sign-up page
+
+The main feature requests page displays three sections:
+
+1. **Currently Being Worked On** (In Progress)
+   - Ordered by projected completion date by default (descending)
+   - Default: expanded
+
+2. **Requested Features**
+   - Ordered by bid amount by default (descending)
+   - Default: collapsed to header only
+
+3. **Completed Features**
+   - Ordered by date delivered by default (descending)
+   - Default: collapsed to header only
+
+**Additional Features:**
+- Each list section allows users to change ordering via a dropdown menu (order by other attributes)
+- Each section is paginated with 10 items loaded at a time
+- Users can paginate through the list
+- App name filter is global for the page - there is a dropdown filter where users can select "All" or a specific app name. Changing it filters all three sections
+- Users can search for feature requests by title or comment text
+- List items are displayed as cards (not a table)
+
+## Data Models
+
+### Feature Request
+
+A feature request is a requester's request for a new feature for their application. It has the following attributes:
+
+- **title**: Short title for the request
+- **app**: The app name that the request is for
+- **request_type**: Type of the request (mandatory field, can only be set on the original request creation, but can be edited by devs). Must be one of:
+  - `UI/UX`: User interface or user experience related request
+  - `backend`: Backend/server-side related request
+- **request_category**: Category classification of the request (mandatory field, can only be set on the original request creation, but can be edited by devs). Must be one of:
+  - `bug`: Bug fix request
+  - `enhancement`: Feature enhancement request
+- **date_requested**: The date of the first comment in the comment section
+- **comment_section**: List of comments about the request (the first comment is the request creation comment)
+- **total_bid_amount**: Total amount of money bid for the request (summed from all comments)
+- **status**: Status of the request, one of:
+  - `requested`: Initial status of the request
+  - `in_progress`: Request is being worked on
+  - `completed`: Request is completed (by developer)
+  - `confirmed`: Request is confirmed by requester as completed
+  - `cancelled`: Request is cancelled
+- **delivered_date**: Date the feature was delivered (only set if status is `completed` or `confirmed`)
+- **projected_completion_date**: Date the feature is projected to be completed (only set if status is `in_progress`)
+- **delivered_by**: List of developers who delivered/are delivering the feature (only populated when status is `in_progress`, `completed`, or `confirmed`)
+
+### Comment
+
+The comment section is a list of comment objects. Each comment has the following attributes:
+
+- **date**: The date of the comment
+- **comment**: The text of the comment (rich text box supporting pasted images, links, and formatting)
+- **bid_amount**: The amount of money bid for the comment (defaults to 0), cannot be negative
+- **commenter_id**: The ID of the user who made the comment
+- **commenter_type**: Type of commenter - one of: `"requester"`, `"dev"`, or `"system"`
+
+### User Account
+
+In order to use the site, each individual must have a user account. This is used to track the user and their comments.
+
+**Account Attributes:**
+- **name**: User's name
+- **email**: User's email address
+- **password**: User's password (hashed, never stored in plaintext)
+- **email_verified**: Boolean indicating if email has been verified (email verification required to use the site)
+- **role**: User's role, one of:
+  - `requester`: Default role for a regular user
+  - `dev`: Role for a developer user
+  - `admin`: Role for an admin user (special account for managing the site, not a regular user account)
+- **payment_info**: Payment information (optional, handled via Stripe Connect):
+  - **stripe_account_id**: Stripe Connect account ID (stored after user connects their Stripe account)
+  - **stripe_account_status**: Status of the Stripe account connection (connected, pending, disconnected)
+  - **preferred_currency**: User's preferred currency for payments (defaults to CAD, can be changed in account settings)
+  - For devs: Stripe account is where they will receive payments
+  - For requesters: Stripe account is where payments will be charged from
+  - **Note**: Payment information is optional, but users must be aware that without connecting a Stripe account:
+    - Devs cannot receive payments for completed requests
+    - Requesters cannot bid on requests (cannot make payments)
+    - If a request is completed by a dev without a connected Stripe account, it is done for free (dev is not paid, requesters are not charged)
+  - **Stripe Onboarding**: Users connect their Stripe account through Stripe's OAuth Connect flow. The app only stores the Stripe account ID, never payment card numbers or bank account details (Stripe handles all sensitive payment data)
+- Users have a "my account" page that shows their own account information and allows them to:
+  - Edit their account information (name, email)
+    - **Email Change Process**:
+      - When a user changes their email address, the new email must be verified
+      - System sends verification email to the new email address immediately
+      - Old email address remains active until new email is verified
+      - User's `email_verified` status is set to `FALSE` when email is changed
+      - User cannot perform actions requiring verification until new email is verified
+      - User sees a message: "Your email address has been changed. Please verify your new email address by clicking the link sent to [new email]. Verification links expire after 24 hours."
+      - Display "Resend verification email" button for the new email
+  - Reset their password
+  - **Email Verification Status**:
+    - If email is not verified, display prominent message: "Your email address has not been verified. Please check your email (including junk/spam folder) for the verification link. Verification links expire after 24 hours."
+    - Display "Resend verification email" button if email is not verified
+    - Show verification status (verified/not verified) clearly
+  - Connect/disconnect their Stripe account (via Stripe Connect OAuth flow)
+  - View their Stripe account connection status
+  - Set their preferred currency (default: CAD, options: CAD, USD, EUR)
+  - View payment history (links to Stripe dashboard or shows transaction summaries)
+  - Generate receipts/paystubs (see Receipt and Paystub Generation section)
+
+## User Interface Pages
+
+### Public Pages (No Authentication Required)
+
+The following pages are publicly accessible without signing in:
+- **Browse Apps Page**: View all apps in the system
+- **Feature Requests Page**: View all feature requests (filtered by app if specified)
+- **Feature Request Detail Page**: View individual feature request details and comments
+- **App Page**: View app information and stats
+
+**Public Page Behavior:**
+- Users can view content but cannot perform actions that require authentication
+- **Sign in/Sign up button** displayed at the top of the page (in header/navbar)
+- When a user clicks an action that requires authentication (e.g., "Add Comment", "Create Request", "Place Bid", "Tip"), they are redirected to the sign-in/sign-up page
+- After signing in, user should be redirected back to the page they were on (or the action they tried to perform)
+- Public pages should clearly indicate which actions require signing in
+- Navigation sidebar is NOT shown on public pages (only on authenticated pages)
+
+### Navigation Sidebar
+
+- **Left-hand sidebar** present on all authenticated pages (not shown on public pages or login/signup pages)
+- Sidebar displays navigation links based on the current user's role and permissions
+- **Common navigation items** (visible to all authenticated users):
+  - Feature Requestor icon/logo (at the top of sidebar, clickable to go to home page)
+  - Home (user's home page)
+  - Browse Apps (browse all configured apps)
+  - Feature Requests (main feature requests page)
+  - Messages (private messaging system)
+  - My Account (account settings and Stripe connection)
+  - Rules (link to rules and process documentation)
+  - Logout
+- **Admin-specific items**:
+  - Admin Panel (admin section)
+  - App Management (manage app registry)
+  - Settings (settings page, changes config.json settings)
+  - Users (manage users)
+- Sidebar should be collapsible/expandable
+- Current page should be highlighted in the sidebar
+- Sidebar should be responsive (may collapse to hamburger menu on mobile)
+
+### Login Page
+
+- Users can click "Sign Up" to go to the sign-up page
+- Sign-up page allows users to select signing up as a dev or as a requester
+- **Sign-up Flow**:
+  1. User fills in their information (name, email, password, role selection)
+  2. System sends verification email immediately after user submits sign-up form
+  3. User is redirected to a "Check your email" page with instructions
+  4. User clicks verification link in email (valid for 24 hours)
+  5. After email verification, user is redirected to instructions document and quiz pages
+  6. After completing quiz, sign-up request is submitted to admin for approval
+  7. Admin approves or denies the request
+  8. If approved, user account is created and user can log in
+- **Email Verification Requirements**:
+  - Users who are not verified can browse the site (view pages) but cannot:
+    - Send messages
+    - Make feature requests
+    - Add comments
+    - Place bids
+  - Unverified users see a message on their account page prompting them to check their email (including junk/spam folder) and offering a "Resend verification email" button
+- The admin account is created by default and has access to manage users. When a user signs up, their sign-up request goes to the admin who must approve or deny the request
+- admin account can change it's password but by default create the admin account wiht logi: "LastTerminal" and passowrd "WhiteMage", this is not stored in plaintext and this config is not git backed, it is on local and used to create the admin account only, used in deploy or when launchign locaaly if the account is not created yet
+- Admins cannot see payment information (Stripe account IDs are masked) but can see all other information. They can also reset passwords for users and devs
+
+### User Home Page
+
+Each user has a home page that shows their own activity and notifications when they log in.
+
+- **Feature Requestor icon/logo** displayed in the center of the page (configurable by admin, stored in instance folder)
+- Page content displays below the icon
+
+**For Requester Users:**
+- List of their own feature requests
+- A list of requests in approve mode - these are requests that the devs have marked as completed but the requester has not yet confirmed
+- On those requests, at the bottom, requesters that have bid non-zero amounts now have an approve button. They can also leave comments to devs detailing what, if anything, is missing or not working as expected
+- Access to receipt generation (see Receipt and Paystub Generation section)
+- Summary at the top showing:
+  - Number of requests they have made
+  - Total bid amount they have made
+  - Number of requests they have made in progress
+  - Total bid amount they have made in progress
+  - Number of requests they have made finished
+  - Total bid amount they have made finished
+  - Number of requests they have made cancelled
+  - Total bid amount they have made cancelled
+
+
+**For Developers:**
+- List of feature requests they are working on
+- Access to paystub generation (see Receipt and Paystub Generation section)
+- Access to receipt generation (devs can see what they've been charged as requesters)
+- Summary at the top showing:
+  - Number of requests in progress
+  - Total bid amount in progress
+  - Number of requests finished
+  - Total bid amount finished
+  - Number of requests finished since last pay
+  - Total bid amount finished since last pay
+  - Total unpaid finished bid amount
+- Section showing any requests in "set ratio mode" (for multi-dev payment distribution)
+  - If there is only one dev, this goes to 100% and the system auto-approves it
+- Section for approving new developers on requests (when another developer is already working on a request, they must approve the new developer)
+
+**Common Elements:**
+- Link to the rules explaining how the process works
+- Notifications section showing:
+  - Notification date
+  - Notification type
+  - Notification message
+  - Link to the notification
+
+### Feature Request Detail Page
+
+- **Public page** - accessible without authentication
+- Sign in/Sign up button displayed at the top of the page
+- Users can view feature request details and all comments without signing in
+- Actions that require authentication (add comment, place bid, edit/delete own comments) redirect to sign-in/sign-up page
+
+When a user clicks on a feature request card, they are taken to the feature request detail page.
+
+**Displayed Information:**
+- Feature request title
+- Feature request app name
+- Feature request date requested
+- Feature request total bid amount
+- Feature request status
+- Feature request delivered date (if applicable)
+- Feature request projected completion date (if applicable)
+- Feature request comment section (all comments)
+- Add comment section at the bottom of the page
+
+**Comment Actions:**
+
+**For Requesters:**
+- Can add a comment and optionally add a bid to the request
+  - **Important**: When placing a bid, no payment is collected immediately. Payment is only collected when the request is confirmed by the required percentage of requesters
+  - Bids are commitments to pay, but actual payment happens later
+- Can edit comments they made (shows as "edited" with a button to see original)
+  - Can change the bid amount
+  - Only allowed while request is in `"requested"` status
+- Can delete comments they made (shows as "deleted" with a button to see original)
+  - Only allowed while request is in `"requested"` status
+- Can confirm the request as completed (sets status to `"confirmed"` and notifies devs)
+  - When a request is confirmed by X% of requesters that placed a non-zero bid, payments are collected from all requesters who bid
+  - X% is configurable in `config.json` (key: `confirmation_percentage`)
+  - If `config.json` or the key does not exist, create it and set to 80
+  - After payments are collected, devs are paid the total bid amount (split according to payment ratios)
+
+**For Developers:**
+- Can edit the request type and category (these can only be set on the original request creation, but devs can edit them)
+- Can set the status of the request to `"in_progress"` when they start working on it
+- Can add or remove themselves from the list of developers working on the request
+  - When they add themselves, the request goes to in_progress. When the last dev leaves, the request goes to requested mode
+  - When they remove themselves, there is an expandable section that only devs can see that shows who had previously worked on this, allowing the devs to contact the person if they need to
+  - Admin can remove devs from requests if they are not working on them or if they are not approved by the requester. In this case, the admin can leave a note for the reason and it notifies the dev
+  - If another developer is already working on the request, they must approve the new developer (approval section on developer home page). Can also be approved by admin
+- Can set the status to `"completed"` when they finish working on it (sets status to `"completed"` and notifies requesters)
+- Can access a dev-only visible section at the bottom of the request page for setting payment ratios (when multiple devs complete a request)
+  - By default, payment is split evenly between all devs
+  - Devs can change the payment ratio for each dev
+  - All devs must click "accept" for the ratio to take effect
+  - If a value changes, all accept clicks are reset
+  - Devs can leave messages in this ratio allocation section
+  - Messages are only visible to devs on the request and the admin
+
+### Private Messaging System
+
+- Users can send private messages to each other
+- Messages are stored in the database
+- There is a messaging page where the left-hand sidebar shows message threads you are a part of (ordered descending by last message in thread) with a red circle indicator for new unread messages in the thread, and the center is the message chat
+- Group messaging threads are also supported
+- The messages are stored in the database and are not git-backed
+- On the messaging page, users can create new messages. Messages can be to a single person or a group
+- Users can block other users from messaging them
+- Users can add a person to an existing single person or group messaging list. If this happens, all current users in the message must approve the addition of the new user. This shows up as a poll message in the list
+- On other pages where a user name is listed (the request detail page, etc.), users can right-click on the user and select "message" to start a new message thread with that user
+- Messaging is done on the backend by user ID, but the frontend shows the user display name
+
+
+### Notification Controls
+
+Users can control what they get email notifications for:
+- New message
+- New request by app (these are not checkboxes but instead an "add a rule" button that allows users to add more notification custom rules)
+- My request status change
+- My request comments
+- Comments on requests I'm working on (for devs)
+- Payment received (for devs)
+- Payment charged (for requesters)
+- Request approved/denied (for sign-up requests)
+- Developer approval requests (for devs)
+- Group message poll results
+
+### Browse Apps Page
+
+- **Public page** - accessible without authentication
+- Page that displays all apps configured in the feature requestor system
+- Sign in/Sign up button displayed at the top of the page
+- Each app is displayed as a card/section with:
+  - **App heading**: App display name with app icon
+  - **App description**: The description of the app
+  - **App URL**: Link to go to the actual app (opens in new tab)
+  - **Tip jar**: Section/button to tip the app owner (see Tip Jar section for authentication requirements)
+  - **View feature requests**: Link to go to the feature requests page filtered for this app
+  - **Request a feature**: Link/button to create a new feature request
+    - If user is not signed in, clicking this redirects to sign-in/sign-up page
+    - If user is signed in, goes to create new feature request page
+- Apps can be displayed in a list layout
+- Apps should be sortable/filterable (optional enhancement)
+
+### Create New Feature Request Page
+
+- Page for requesters to create a new feature request
+- **Required fields when creating a request:**
+  - Request Type: Must select either "UI/UX" or "Backend" (mandatory)
+  - Request Category: Must select either "Bug" or "Enhancement" (mandatory)
+- Requesters are advised to read existing requests to ensure they are not duplicating requests
+- Includes a "best practice" guide for requesters to follow when making a request (what information to include, how detailed to be)
+- When a request is created, before it is actually created, show the user similar requests for the same app. This is to help the user ensure they are not duplicating requests
+  - Similarity detection uses keyword matching, title similarity (Levenshtein, Jaccard algorithms), and semantic analysis
+  - User is presented with up to 5 similar requests (configurable in config.json)
+  - User can select to tag their request onto one of the similar requests (adds as comment, bid included in main request)
+  - If user decides none are similar, they can create a new request
+  - Similarity threshold and max results count are configurable in config.json
+- Dev users can also act as a requester and create requests. On that app they are treated as a requester. On their home page they have two tabs, one for dev summary and one for requester summary
+    - They can work on requests they have made, but in this case they are not paid for the work
+
+### App Page
+
+**Important Note:**
+- The Feature Requestor application itself should be implicitly managed as an app in the system
+- This means the Feature Requestor app should appear in the app registry automatically
+- Users can create feature requests for the Feature Requestor app itself
+- The Feature Requestor app should have its own app page, stats, and tip jar
+- This app should be created automatically on first launch and cannot be deleted
+- Admin can edit the Feature Requestor app's information (display name, description, icon, etc.) but cannot delete it
+
+**Admin Access:**
+- Admin can manage the app registry:
+  - **Add new app:**
+    - App name (internal identifier, must be URL/endpoint safe - only alphanumeric characters, hyphens, and underscores allowed, no spaces or special characters)
+    - App display name (used in the UI)
+    - App description
+    - App URL
+    - GitHub URL
+    - App owner (defaults to the admin, but can be any dev user)
+    - App icon:
+      - Admin can upload an icon file
+      - Or click "Get icon from site" - this polls the app URL and requests the favicon, then uploads it automatically
+  - **Edit existing apps**
+  - **Delete apps**
+  - **Stats section for the app:**
+    - Number of requests
+    - Number of developers (expandable to show the list of developers)
+    - Number of requesters (expandable to show the list of requesters)
+    - Number of comments
+    - Number of payments
+    - Total payments made
+    - Total bid amount requested
+    - Total bid amount worked on
+    - The stats section can be filtered by most of the attributes displayed in the feature request cards (e.g., status, request type, category, date ranges, etc.)
+
+**Other Users Can View the App Page:**
+- **Public page** - accessible without authentication
+- Sign in/Sign up button displayed at the top of the page
+- **Developers** (when signed in) can see:
+  - The GitHub link
+  - All app information (not the stats section)
+- **Requesters** (when signed in) can see:
+  - App name
+  - App description
+  - App URL
+  - Link to the app request page for that app
+- **All users** (including guests) also see a tip jar section at the bottom of the page:
+  - Opens a modal that allows them to tip the app owner
+  - **Tip Payment Options**:
+    - **Option 1 (Recommended)**: Users with Feature Requestor accounts and connected Stripe accounts can tip directly through the platform
+    - **Option 2**: Users without accounts can tip using Stripe Checkout as a guest
+      - Guest users provide email address (optional, for receipt)
+      - Payment is processed immediately via Stripe Checkout
+      - No Feature Requestor account required
+      - No Stripe account connection required for the tipper
+      - Tip is still recorded in the database with guest email (if provided) or marked as anonymous
+  - Only app owners with connected Stripe accounts can receive tips
+  - Tips are stored in the database and are not git-backed (stored in instance section)
+  - Add stats to the app page for the app owner showing tip totals
+  - Tips are processed immediately using Stripe Checkout
+
+### Admin Section
+
+Admin account (special account, not a regular user account) has access to:
+- **Email Configuration**:
+  - **Email Templates Management**:
+    - Edit email templates using rich text editor (Word-like editor with font selection, font size, bold, underline, italic, text color, background color, image insertion/paste, link insertion, basic formatting)
+    - Templates stored in `instance/email_templates.json` (not git-backed)
+    - Templates support variables (e.g., `{user_name}`, `{verification_link}`, `{app_name}`, `{feature_request_title}`)
+    - Preview templates with sample data
+    - Separate templates for:
+      - Email verification
+      - Password reset
+      - Notification types (new message, new request, status change, comments, payments, etc.)
+  - **Email Settings Configuration**:
+    - **From Email Mask**: Set the email address users see in their inbox (e.g., "noreply@feature-requestor.com")
+    - **SMTP Configuration**:
+      - SMTP server hostname (e.g., "smtp.gmail.com")
+      - SMTP port (e.g., 587 for TLS, 465 for SSL)
+      - Connection security (TLS/SSL/None)
+      - Real from email address (SMTP username)
+      - SMTP password (app-specific password or account password)
+      - Any additional connection parameters required by the email provider
+    - Test email sending functionality
+    - Settings stored in `instance/email_config.json` (not git-backed)
+- **Feature Requestor Branding**:
+  - Upload/change the Feature Requestor icon/logo
+  - Icon is stored in the instance folder (not git-backed)
+  - Icon is used as:
+    - Browser tab icon (favicon)
+    - Top of left-hand sidebar
+    - Center of main home page
+    - Other locations as needed throughout the UI
+  - Icon can be uploaded as an image file
+  - Icon should be optimized for various sizes (favicon, sidebar, etc.)
+- Special section for managing the database
+- Create a backup of the database and download it
+- Upload a backup to the database
+- Restore a backup
+- Other administrative functions
+- View raw data tables (Stripe account IDs, payment information, and password information, if stored, are masked with `***` instead of showing the actual information)
+
+### Receipt and Paystub Generation
+
+**Payment Transaction Storage:**
+- All payments charged to requesters and paid to devs are stored in the database
+- Each payment transaction record includes:
+  - Transaction date
+  - Amount (in the currency it was processed)
+  - Currency
+  - Transaction type (feature request payment, tip, etc.)
+  - Associated app (display name)
+  - Associated feature request (title, if applicable)
+  - User ID (requester or dev)
+  - Stripe transaction ID (for reference)
+- Payment transactions are stored in the instance database (not git-backed)
+
+**For Requesters - Receipt Generation:**
+- Requesters can generate receipts for payments they've made
+- Select a date range for the receipt
+- Receipt displays:
+  - Receipt header with requester name and date range
+  - List of all charges in the selected date range, each showing:
+    - Date of payment
+    - App display name
+    - Feature request title (on a separate line below the app name)
+    - If it's a tip, it just says "Tip" (no feature request title)
+    - Amount charged (in the currency it was charged)
+  - Summary totals:
+    - Total amount charged in each currency
+    - Grand total (converted to requester's preferred currency)
+- Receipts can be downloaded/printed (PDF format recommended)
+
+**For Developers - Paystub Generation:**
+- Developers can generate paystubs for payments they've received
+- Select a date range for the paystub
+- Paystub displays:
+  - Paystub header with developer name and date range
+  - List of all payments received in the selected date range, each showing:
+    - Date of payment
+    - App display name
+    - Feature request title (on a separate line below the app name)
+    - If it's a tip, it just says "Tip" (no feature request title)
+    - Amount received (in the currency it was received)
+  - Summary totals:
+    - Total amount received in each currency
+    - Grand total (converted to dev's preferred currency)
+- Paystubs can be downloaded/printed (PDF format recommended)
+
+**For Developers - Receipt Generation:**
+- Developers also have access to receipt generation (same as requesters)
+- This allows devs to see what they've been charged when acting as requesters
+- Same format and functionality as requester receipts
+
+**Access:**
+- Receipt generation: Available in "My Account" page or user home page
+- Paystub generation: Available in "My Account" page or developer home page
+- Date range selector: Start date and end date picker
+- Generate button: Creates and displays the receipt/paystub
+- Download/Print options: Available after generation
+
+## Rules and Compliance
+
+### Rules and Privacy Policy
+
+- User page should have a link to the rules explaining how the process works
+- When a user creates an account, they must agree to the rules and privacy policy before they can use the site
+- Agreement is not just a button - there is a short quiz at the bottom of the page covering major issues:
+  - How payment works
+  - How the process works
+- User must get all 3 questions correct before they can use the site to make an account and use the site
+- If the process changes in any way, all users must be notified and the quiz must be updated to cover the new rules and process
+
+### User Documentation Creation
+
+**Documentation Requirements:**
+- Create comprehensive user documentation that explains the Feature Requestor process
+- Documentation must be:
+  - **Very clear and detailed**: Cover all aspects of how the system works
+  - **Readable by regular people**: Use plain language, avoid technical jargon
+  - **Not difficult to comprehend**: Break down complex concepts into simple explanations
+  - **Include examples**: Provide real-world scenarios and use cases
+  - **Include sample formulas**: Show how calculations work (e.g., fee distribution, payment splits, currency conversion)
+- Documentation should cover:
+  - How to create an account and get approved
+  - How to create a feature request
+  - How bidding works (including fee calculations)
+  - How the payment process works (when payments are collected, how they're distributed)
+  - How developers work on requests
+  - How confirmation works (percentage thresholds)
+  - How payment ratios work for multi-dev requests
+  - How currency conversion works
+  - How tips work
+  - How receipts and paystubs work
+  - Best practices for requesters and developers
+- **Quiz Questions:**
+  - Create quiz questions based on the documentation
+  - Questions should test understanding of key concepts:
+    - Payment timing (when are payments collected?)
+    - Fee distribution (how are fees calculated and split?)
+    - Confirmation process (what percentage is needed?)
+    - Payment ratios (how do multi-dev payments work?)
+  - Questions should be multiple choice or true/false
+  - Provide clear explanations for correct answers
+  - Users must answer all questions correctly to proceed
+- Documentation should be accessible from:
+  - Rules link on user home page
+  - Sign-up page (part of account creation process, one of the steps after the user puts in their information is to agree to the rules and privacy policy and take the quiz)
+  - Quiz page (as reference material)
+- Documentation should be stored in a format that can be easily updated (e.g., markdown files, database, or template files)
+- Where documentation emtnions values from the config.json file the docs should be dynamically refrencing the config.json file values
+- When process changes, documentation must be updated and users notified
+
+## Notifications
+
+- When new comments are added to a request, any user/dev associated with the request will be notified by email ( if they have opted in to notifications)
+- Users receive notifications on their home page showing:
+  - Notification date
+  - Notification type
+  - Notification message
+  - Link to the notification
+
+## Payment System
+
+**Payment Solution: Stripe Connect (Marketplace Model)**
+
+This application uses Stripe Connect to handle all payment processing. Stripe Connect is designed for marketplaces and platforms that facilitate payments between multiple parties.
+
+### How Payments Work
+
+1. **User Onboarding**:
+   - Users (both requesters and devs) must connect their Stripe account to use payment features
+   - This is done through Stripe's OAuth Connect flow
+   - The app only stores the Stripe account ID (never payment card numbers or bank details)
+   - Stripe handles all sensitive payment data and PCI compliance
+
+2. **Payment Collection**:
+   - When a requester places a bid, no payment is collected immediately
+   - When a request is confirmed by the required percentage of requesters, payments are collected from all requesters who placed non-zero bids
+     - This happens after the devs decide and approve the payment ratios
+   - **Fee Calculation and Distribution**:
+     - Stripe fees are calculated on the total bid amount
+     - Fees are added to the total and distributed proportionally among all requesters who placed non-zero bids
+     - Each requester pays their original bid amount plus a proportional share of the fees
+     - Fee distribution is based on the ratio of each requester's bid to the total bid amount
+     - Example: If there are two bids ($100 and $400, total $500) and fees are $10:
+       - Person who bid $100 pays: $100 + ($10 × $100/$500) = $100 + $2 = $102
+       - Person who bid $400 pays: $400 + ($10 × $400/$500) = $400 + $8 = $408
+       - Total collected: $510 ($500 bids + $10 fees)
+   - Payments are collected using Stripe Payment Intents API
+   - Each requester is charged in their preferred currency (including their proportional share of fees)
+
+3. **Payment Distribution**:
+   - After collecting payments (including fees), determine the most common payout currency:
+     - Calculate the total amount each dev will receive based on payment ratios
+     - Group devs by their preferred currency
+     - Sum the amounts for each currency group
+     - The currency with the highest total amount becomes the target payout currency
+   - Convert the total collected amount to the target payout currency (if not already in that currency)
+   - The target currency amount (which includes fees) is split according to the payment ratios set by devs
+   - Each dev receives their proportional share of the total (including fees)
+   - For each dev:
+     - If their preferred currency matches the target payout currency, no conversion needed
+     - If their preferred currency differs, convert their share to their preferred currency
+   - Funds are transferred to each dev's Stripe account using Stripe Transfers API
+   - Stripe automatically handles payouts to devs' bank accounts
+   - **Note**: Devs receive the full amount including fees - fees are paid by requesters, not deducted from dev payouts
+
+4. **Currency Handling**:
+   - All bid amounts are stored in the currency the user selected when bidding
+   - Currency conversion is handled automatically by Stripe at market rates
+   - When displaying totals, amounts are converted to the viewing user's preferred currency
+   - When processing payments, Stripe handles all currency conversions
+
+5. **Multi-Dev Payments**:
+   - When multiple devs work on a request, they set payment ratios (default is even split)
+   - All devs must accept the payment ratio before it takes effect
+   - Payments are split according to the accepted ratios
+
+6. **Tip Jar**:
+   - Users can tip app owners through the tip jar feature
+   - Tips are processed immediately using Stripe Checkout
+   - **Two payment methods**:
+     - **Authenticated users**: Users with Feature Requestor accounts and connected Stripe accounts can tip directly
+     - **Guest users**: Users without accounts can tip as guests using Stripe Checkout
+       - Guest tipping requires only email (optional, for receipt)
+       - No Feature Requestor account required
+       - No Stripe account connection required for the tipper
+       - Payment processed via Stripe Checkout guest checkout
+       - Tip recorded in database with guest email or marked as anonymous
+
+### What Information is Needed from Users
+
+**For Requesters:**
+- Must connect a Stripe account (via Stripe Connect OAuth flow)
+    - only in order to be able to bid, they can still make an accoun make reqwuest and comment without a stripe account, but they bid ammount box is not editable greyed out at 0, on hover there is a tooltip that says "you must connect a stripe account to bid"
+- Must select a preferred currency (default: CAD)
+- Stripe will collect: payment method (credit/debit card), billing information
+- The app stores: Stripe account ID, preferred currency, account connection status
+
+**For Developers:**
+- Must connect a Stripe account (via Stripe Connect OAuth flow)
+    - only in order to be able to receive payments, they can still make an account and work on requests without a stripe account, but they are not paid for the work
+- Must provide bank account information to Stripe (for receiving payouts)
+- Must select a preferred currency (default: CAD)
+- Stripe will collect: bank account details, tax information (for 1099-K forms)
+- The app stores: Stripe account ID, preferred currency, account connection status
+
+**Security:**
+- The app NEVER stores credit card numbers, bank account numbers, or other sensitive payment data
+- All sensitive data is handled by Stripe (PCI compliant)
+- The app only stores Stripe account IDs and connection status
+- All payment operations are done through Stripe's secure APIs
+
+### Payment Flow Summary
+
+1. Requester places bid → No payment collected yet
+2. Devs work on request → Status changes to "in_progress"
+3. Devs mark as completed → Status changes to "completed"
+4. Requesters confirm → When X% confirm, payments are collected
+5. Payments collected → Stripe charges all requesters who bid
+6. Target currency determined → Calculate most common payout currency by amount (based on dev payment ratios and preferred currencies)
+7. Funds converted → Total converted to target payout currency (if not already in that currency)
+8. Amount split → Split by payment ratios in target payout currency
+9. Devs paid → Each dev receives their share in their preferred currency (no conversion if matches target, otherwise converted)
+10. Stripe handles → Automatic payout to devs' bank accounts
+
+### Fees
+
+- Stripe charges standard transaction fees (~2.9% + $0.30 per transaction)
+- Additional 0.25% per payout for Connect accounts (can be passed to users or absorbed by platform)
+- Currency conversion fees are included in Stripe's exchange rates
+- **Fee Distribution**:
+  - All Stripe fees are calculated on the total bid amount
+  - Fees are added to the total and distributed proportionally among all requesters who placed non-zero bids
+  - Each requester pays their original bid amount plus their proportional share of fees
+  - Fee distribution ratio = (requester's bid amount) / (total bid amount)
+  - Fees are included in the payment amount charged to each requester
+  - Devs receive the full amount (including fees) - fees are not deducted from dev payouts
+- Fee structure should be clearly communicated to users before they place bids
+- Users should see an estimated total (bid + proportional fees) when placing a bid
+
+### Error Handling
+
+- Failed payments: If a requester's payment fails, they are notified and the request status may need adjustment
+- Failed transfers: If a transfer to a dev fails, they are notified and the transfer can be retried
+- Webhooks: Stripe sends webhooks for payment events (success, failure, etc.) which the app must handle
+- Refunds: If a request is cancelled, refunds can be processed through Stripe's API
+
+## Configuration
+
+### config.json
+
+Non-git-backed configuration file located in the instance folder:
+- **confirmation_percentage**: Percentage of requesters (who placed non-zero bids) that must confirm a request before devs are paid
+  - Default: 80 (if file or key does not exist, create and set to 80)
+  - Type: integer (percentage)
+- **similar_request_max_results**: Maximum number of similar requests to show when creating a new request
+  - Default: 5 (if key does not exist, create and set to 5)
+  - Type: integer
+- **similar_request_threshold**: Similarity threshold for matching requests (0.0 to 1.0, where 1.0 is exact match)
+  - Default: 0.6 (if key does not exist, create and set to 0.6)
+  - Type: float
+
+## Data Storage
+
+- User database and request database are NOT git-backed
+- They are part of instance-level data
+- Stored in the `instance/data/` folder
+- Database backups can be created, downloaded, uploaded, and restored via the admin section
+- **Feature Requestor icon/logo** is stored in the `instance/` folder (not git-backed)
+  - Icon file should be stored as `instance/icon.png` (or similar format)
+  - Admin can upload/replace this file through the admin UI
+  - Used as favicon (browser tab icon) and throughout the UI (sidebar, home page, etc.)
+
+## Database Schema
+
+All tables are stored in the instance database (not git-backed). Below are the exact tables, columns, and data storage specifications:
+
+### users
+
+Stores user account information.
+
+**Columns:**
+- `id` (PRIMARY KEY, INTEGER, AUTO_INCREMENT): Unique user identifier
+- `name` (TEXT, NOT NULL): User's display name
+- `email` (TEXT, NOT NULL, UNIQUE): User's email address
+- `password_hash` (TEXT, NOT NULL): Hashed password (never store plaintext)
+- `email_verified` (BOOLEAN, NOT NULL, DEFAULT FALSE): Whether email has been verified
+- `role` (TEXT, NOT NULL): User role - one of: `"requester"`, `"dev"`, `"admin"`
+- `stripe_account_id` (TEXT, NULLABLE): Stripe Connect account ID (if connected)
+- `stripe_account_status` (TEXT, NULLABLE): Stripe account status - one of: `"connected"`, `"pending"`, `"disconnected"`, or NULL
+- `preferred_currency` (TEXT, NOT NULL, DEFAULT 'CAD'): User's preferred currency - one of: `"CAD"`, `"USD"`, `"EUR"`
+- `created_at` (TIMESTAMP, NOT NULL, DEFAULT CURRENT_TIMESTAMP): Account creation timestamp
+- `updated_at` (TIMESTAMP, NOT NULL, DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP): Last update timestamp
+
+**Indexes:**
+- PRIMARY KEY on `id`
+- UNIQUE INDEX on `email`
+- INDEX on `role`
+- INDEX on `stripe_account_id`
+
+### apps
+
+Stores app registry information.
+
+**Columns:**
+- `id` (PRIMARY KEY, INTEGER, AUTO_INCREMENT): Unique app identifier
+- `app_name` (TEXT, NOT NULL, UNIQUE): Internal app name (URL-safe, alphanumeric, hyphens, underscores only)
+- `app_display_name` (TEXT, NOT NULL): App display name (used in UI)
+- `app_description` (TEXT, NULLABLE): App description
+- `app_url` (TEXT, NULLABLE): App URL
+- `github_url` (TEXT, NULLABLE): GitHub URL
+- `app_owner_id` (INTEGER, NOT NULL, FOREIGN KEY references `users.id`): App owner (dev user)
+- `icon_path` (TEXT, NULLABLE): Path to app icon file (stored in instance folder)
+- `created_at` (TIMESTAMP, NOT NULL, DEFAULT CURRENT_TIMESTAMP): App creation timestamp
+- `updated_at` (TIMESTAMP, NOT NULL, DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP): Last update timestamp
+
+**Indexes:**
+- PRIMARY KEY on `id`
+- UNIQUE INDEX on `app_name`
+- INDEX on `app_owner_id`
+
+### feature_requests
+
+Stores feature request information.
+
+**Columns:**
+- `id` (PRIMARY KEY, INTEGER, AUTO_INCREMENT): Unique feature request identifier
+- `title` (TEXT, NOT NULL): Feature request title
+- `app_id` (INTEGER, NOT NULL, FOREIGN KEY references `apps.id`): App this request is for
+- `request_type` (TEXT, NOT NULL): Request type - one of: `"UI/UX"`, `"backend"`
+- `request_category` (TEXT, NOT NULL): Request category - one of: `"bug"`, `"enhancement"`
+- `status` (TEXT, NOT NULL, DEFAULT 'requested'): Request status - one of: `"requested"`, `"in_progress"`, `"completed"`, `"confirmed"`, `"cancelled"`
+- `date_requested` (TIMESTAMP, NOT NULL): Date of first comment (request creation)
+- `total_bid_amount` (DECIMAL(10,2), NOT NULL, DEFAULT 0.00): Total bid amount (summed from comments)
+- `delivered_date` (TIMESTAMP, NULLABLE): Date feature was delivered (set when status is `"completed"` or `"confirmed"`)
+- `projected_completion_date` (TIMESTAMP, NULLABLE): Projected completion date (set when status is `"in_progress"`)
+- `created_at` (TIMESTAMP, NOT NULL, DEFAULT CURRENT_TIMESTAMP): Request creation timestamp
+- `updated_at` (TIMESTAMP, NOT NULL, DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP): Last update timestamp
+
+**Indexes:**
+- PRIMARY KEY on `id`
+- INDEX on `app_id`
+- INDEX on `status`
+- INDEX on `date_requested`
+- INDEX on `request_type`
+- INDEX on `request_category`
+
+### comments
+
+Stores comments on feature requests.
+
+**Columns:**
+- `id` (PRIMARY KEY, INTEGER, AUTO_INCREMENT): Unique comment identifier
+- `feature_request_id` (INTEGER, NOT NULL, FOREIGN KEY references `feature_requests.id`): Feature request this comment belongs to
+- `commenter_id` (INTEGER, NOT NULL, FOREIGN KEY references `users.id`): User who made the comment
+- `commenter_type` (TEXT, NOT NULL): Commenter type - one of: `"requester"`, `"dev"`, `"system"`
+- `comment` (TEXT, NOT NULL): Comment text (rich text, supports images, links, formatting)
+- `bid_amount` (DECIMAL(10,2), NOT NULL, DEFAULT 0.00): Bid amount for this comment (cannot be negative)
+- `date` (TIMESTAMP, NOT NULL, DEFAULT CURRENT_TIMESTAMP): Comment date
+- `is_edited` (BOOLEAN, NOT NULL, DEFAULT FALSE): Whether comment has been edited
+- `is_deleted` (BOOLEAN, NOT NULL, DEFAULT FALSE): Whether comment has been deleted
+- `original_comment` (TEXT, NULLABLE): Original comment text (stored if edited or deleted)
+- `created_at` (TIMESTAMP, NOT NULL, DEFAULT CURRENT_TIMESTAMP): Comment creation timestamp
+- `updated_at` (TIMESTAMP, NOT NULL, DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP): Last update timestamp
+
+**Indexes:**
+- PRIMARY KEY on `id`
+- INDEX on `feature_request_id`
+- INDEX on `commenter_id`
+- INDEX on `date`
+
+### feature_request_developers
+
+Stores which developers are working on which feature requests (many-to-many relationship).
+
+**Columns:**
+- `id` (PRIMARY KEY, INTEGER, AUTO_INCREMENT): Unique relationship identifier
+- `feature_request_id` (INTEGER, NOT NULL, FOREIGN KEY references `feature_requests.id`): Feature request
+- `developer_id` (INTEGER, NOT NULL, FOREIGN KEY references `users.id`): Developer working on the request
+- `is_approved` (BOOLEAN, NOT NULL, DEFAULT FALSE): Whether this developer has been approved (by other devs or admin)
+- `approved_by_id` (INTEGER, NULLABLE, FOREIGN KEY references `users.id`): User who approved this developer (dev or admin)
+- `added_at` (TIMESTAMP, NOT NULL, DEFAULT CURRENT_TIMESTAMP): When developer was added
+- `removed_at` (TIMESTAMP, NULLABLE): When developer was removed (NULL if still active)
+
+**Indexes:**
+- PRIMARY KEY on `id`
+- UNIQUE INDEX on (`feature_request_id`, `developer_id`, `removed_at`) - ensures one active relationship per dev per request
+- INDEX on `feature_request_id`
+- INDEX on `developer_id`
+
+### feature_request_developer_history
+
+Stores history of developers who previously worked on requests (for expandable section when devs remove themselves).
+
+**Columns:**
+- `id` (PRIMARY KEY, INTEGER, AUTO_INCREMENT): Unique history record identifier
+- `feature_request_id` (INTEGER, NOT NULL, FOREIGN KEY references `feature_requests.id`): Feature request
+- `developer_id` (INTEGER, NOT NULL, FOREIGN KEY references `users.id`): Developer who worked on the request
+- `started_at` (TIMESTAMP, NOT NULL): When developer started working
+- `removed_at` (TIMESTAMP, NOT NULL): When developer was removed
+- `removed_by` (TEXT, NOT NULL): Who removed them - one of: `"self"`, `"admin"`, `"system"`
+
+**Indexes:**
+- PRIMARY KEY on `id`
+- INDEX on `feature_request_id`
+- INDEX on `developer_id`
+
+### payment_ratios
+
+Stores payment ratios for multi-dev feature requests (when devs set how to split payment).
+
+**Columns:**
+- `id` (PRIMARY KEY, INTEGER, AUTO_INCREMENT): Unique ratio configuration identifier
+- `feature_request_id` (INTEGER, NOT NULL, FOREIGN KEY references `feature_requests.id`): Feature request
+- `developer_id` (INTEGER, NOT NULL, FOREIGN KEY references `users.id`): Developer
+- `ratio_percentage` (DECIMAL(5,2), NOT NULL): Percentage of payment this dev receives (0.00 to 100.00)
+- `is_accepted` (BOOLEAN, NOT NULL, DEFAULT FALSE): Whether this dev has accepted the ratio
+- `accepted_at` (TIMESTAMP, NULLABLE): When dev accepted the ratio
+- `created_at` (TIMESTAMP, NOT NULL, DEFAULT CURRENT_TIMESTAMP): Ratio creation timestamp
+- `updated_at` (TIMESTAMP, NOT NULL, DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP): Last update timestamp
+
+**Indexes:**
+- PRIMARY KEY on `id`
+- UNIQUE INDEX on (`feature_request_id`, `developer_id`) - one ratio per dev per request
+- INDEX on `feature_request_id`
+
+### payment_ratio_messages
+
+Stores messages in the payment ratio allocation section (visible only to devs and admin).
+
+**Columns:**
+- `id` (PRIMARY KEY, INTEGER, AUTO_INCREMENT): Unique message identifier
+- `feature_request_id` (INTEGER, NOT NULL, FOREIGN KEY references `feature_requests.id`): Feature request
+- `sender_id` (INTEGER, NOT NULL, FOREIGN KEY references `users.id`): User who sent the message
+- `message` (TEXT, NOT NULL): Message text
+- `created_at` (TIMESTAMP, NOT NULL, DEFAULT CURRENT_TIMESTAMP): Message creation timestamp
+
+**Indexes:**
+- PRIMARY KEY on `id`
+- INDEX on `feature_request_id`
+
+### payment_transactions
+
+Stores all payment transactions (charged to requesters, paid to devs, and tips).
+
+**Columns:**
+- `id` (PRIMARY KEY, INTEGER, AUTO_INCREMENT): Unique transaction identifier
+- `user_id` (INTEGER, NULLABLE, FOREIGN KEY references `users.id`): User (requester or dev) - NULL for guest tips
+- `guest_email` (TEXT, NULLABLE): Email address for guest transactions (tips from non-authenticated users)
+- `transaction_type` (TEXT, NOT NULL): Transaction type - one of: `"feature_request_payment"`, `"tip"`
+- `amount` (DECIMAL(10,2), NOT NULL): Transaction amount
+- `currency` (TEXT, NOT NULL): Currency code (e.g., `"CAD"`, `"USD"`, `"EUR"`)
+- `app_id` (INTEGER, NULLABLE, FOREIGN KEY references `apps.id`): Associated app (required for tips)
+- `feature_request_id` (INTEGER, NULLABLE, FOREIGN KEY references `feature_requests.id`): Associated feature request (NULL for tips)
+- `stripe_transaction_id` (TEXT, NULLABLE): Stripe transaction ID for reference
+- `direction` (TEXT, NOT NULL): Payment direction - one of: `"charged"` (to requester), `"paid"` (to dev), `"tip"` (guest or authenticated tip)
+- `is_guest_transaction` (BOOLEAN, NOT NULL, DEFAULT FALSE): Whether this is a guest transaction (no user account)
+- `transaction_date` (TIMESTAMP, NOT NULL, DEFAULT CURRENT_TIMESTAMP): When transaction occurred
+- `created_at` (TIMESTAMP, NOT NULL, DEFAULT CURRENT_TIMESTAMP): Record creation timestamp
+
+**Indexes:**
+- PRIMARY KEY on `id`
+- INDEX on `user_id`
+- INDEX on `transaction_date`
+- INDEX on `transaction_type`
+- INDEX on `app_id`
+- INDEX on `feature_request_id`
+
+### message_threads
+
+Stores message threads (conversations between users).
+
+**Columns:**
+- `id` (PRIMARY KEY, INTEGER, AUTO_INCREMENT): Unique thread identifier
+- `thread_type` (TEXT, NOT NULL): Thread type - one of: `"direct"` (single person), `"group"` (multiple people)
+- `created_at` (TIMESTAMP, NOT NULL, DEFAULT CURRENT_TIMESTAMP): Thread creation timestamp
+- `updated_at` (TIMESTAMP, NOT NULL, DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP): Last message timestamp
+
+**Indexes:**
+- PRIMARY KEY on `id`
+- INDEX on `updated_at` (for ordering by last message)
+
+### message_thread_participants
+
+Stores which users are in which message threads (many-to-many relationship).
+
+**Columns:**
+- `id` (PRIMARY KEY, INTEGER, AUTO_INCREMENT): Unique participant record identifier
+- `thread_id` (INTEGER, NOT NULL, FOREIGN KEY references `message_threads.id`): Message thread
+- `user_id` (INTEGER, NOT NULL, FOREIGN KEY references `users.id`): User in the thread
+- `is_blocked` (BOOLEAN, NOT NULL, DEFAULT FALSE): Whether this user has blocked the thread
+- `last_read_at` (TIMESTAMP, NULLABLE): When user last read messages in this thread
+- `joined_at` (TIMESTAMP, NOT NULL, DEFAULT CURRENT_TIMESTAMP): When user joined the thread
+
+**Indexes:**
+- PRIMARY KEY on `id`
+- UNIQUE INDEX on (`thread_id`, `user_id`)
+- INDEX on `thread_id`
+- INDEX on `user_id`
+
+### messages
+
+Stores individual messages in threads.
+
+**Columns:**
+- `id` (PRIMARY KEY, INTEGER, AUTO_INCREMENT): Unique message identifier
+- `thread_id` (INTEGER, NOT NULL, FOREIGN KEY references `message_threads.id`): Thread this message belongs to
+- `sender_id` (INTEGER, NOT NULL, FOREIGN KEY references `users.id`): User who sent the message
+- `message` (TEXT, NOT NULL): Message text
+- `is_poll` (BOOLEAN, NOT NULL, DEFAULT FALSE): Whether this is a poll message (for adding users to group threads)
+- `poll_type` (TEXT, NULLABLE): Poll type - one of: `"add_user"`, or NULL
+- `created_at` (TIMESTAMP, NOT NULL, DEFAULT CURRENT_TIMESTAMP): Message creation timestamp
+
+**Indexes:**
+- PRIMARY KEY on `id`
+- INDEX on `thread_id`
+- INDEX on `sender_id`
+- INDEX on `created_at`
+
+### message_poll_votes
+
+Stores votes on poll messages (for adding users to group threads).
+
+**Columns:**
+- `id` (PRIMARY KEY, INTEGER, AUTO_INCREMENT): Unique vote identifier
+- `message_id` (INTEGER, NOT NULL, FOREIGN KEY references `messages.id`): Poll message
+- `user_id` (INTEGER, NOT NULL, FOREIGN KEY references `users.id`): User who voted
+- `vote` (TEXT, NOT NULL): Vote - one of: `"approve"`, `"reject"`
+- `voted_at` (TIMESTAMP, NOT NULL, DEFAULT CURRENT_TIMESTAMP): When vote was cast
+
+**Indexes:**
+- PRIMARY KEY on `id`
+- UNIQUE INDEX on (`message_id`, `user_id`) - one vote per user per poll
+- INDEX on `message_id`
+
+### notifications
+
+Stores user notifications.
+
+**Columns:**
+- `id` (PRIMARY KEY, INTEGER, AUTO_INCREMENT): Unique notification identifier
+- `user_id` (INTEGER, NOT NULL, FOREIGN KEY references `users.id`): User who receives the notification
+- `notification_type` (TEXT, NOT NULL): Notification type - one of: `"new_message"`, `"new_request"`, `"request_status_change"`, `"request_comment"`, `"payment_received"`, `"payment_charged"`, `"request_approved"`, `"request_denied"`, `"developer_approval_request"`, `"group_message_poll_result"`
+- `notification_message` (TEXT, NOT NULL): Notification message text
+- `link` (TEXT, NULLABLE): Link to related content
+- `is_read` (BOOLEAN, NOT NULL, DEFAULT FALSE): Whether notification has been read
+- `read_at` (TIMESTAMP, NULLABLE): When notification was read
+- `created_at` (TIMESTAMP, NOT NULL, DEFAULT CURRENT_TIMESTAMP): Notification creation timestamp
+
+**Indexes:**
+- PRIMARY KEY on `id`
+- INDEX on `user_id`
+- INDEX on `is_read`
+- INDEX on `created_at`
+
+### notification_preferences
+
+Stores user notification preferences.
+
+**Columns:**
+- `id` (PRIMARY KEY, INTEGER, AUTO_INCREMENT): Unique preference identifier
+- `user_id` (INTEGER, NOT NULL, FOREIGN KEY references `users.id`): User
+- `notification_type` (TEXT, NOT NULL): Notification type (same as notifications table)
+- `preference` (TEXT, NOT NULL): Preference - one of: `"none"`, `"immediate"`, `"bulk"`
+- `custom_rule` (TEXT, NULLABLE): Custom rule JSON (for app-specific rules, etc.)
+- `created_at` (TIMESTAMP, NOT NULL, DEFAULT CURRENT_TIMESTAMP): Preference creation timestamp
+- `updated_at` (TIMESTAMP, NOT NULL, DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP): Last update timestamp
+
+**Indexes:**
+- PRIMARY KEY on `id`
+- UNIQUE INDEX on (`user_id`, `notification_type`)
+- INDEX on `user_id`
+
+### user_signup_requests
+
+Stores sign-up requests awaiting admin approval.
+
+**Columns:**
+- `id` (PRIMARY KEY, INTEGER, AUTO_INCREMENT): Unique sign-up request identifier
+- `name` (TEXT, NOT NULL): Requested user name
+- `email` (TEXT, NOT NULL, UNIQUE): Requested email address
+- `email_verified` (BOOLEAN, NOT NULL, DEFAULT FALSE): Whether email has been verified
+- `password_hash` (TEXT, NOT NULL): Hashed password
+- `requested_role` (TEXT, NOT NULL): Requested role - one of: `"requester"`, `"dev"`
+- `status` (TEXT, NOT NULL, DEFAULT 'pending'): Request status - one of: `"pending"`, `"approved"`, `"denied"`
+- `reviewed_by_id` (INTEGER, NULLABLE, FOREIGN KEY references `users.id`): Admin who reviewed the request
+- `reviewed_at` (TIMESTAMP, NULLABLE): When request was reviewed
+- `created_at` (TIMESTAMP, NOT NULL, DEFAULT CURRENT_TIMESTAMP): Request creation timestamp
+
+**Indexes:**
+- PRIMARY KEY on `id`
+- UNIQUE INDEX on `email`
+- INDEX on `status`
+
+### user_blocks
+
+Stores user blocking relationships (for messaging).
+
+**Columns:**
+- `id` (PRIMARY KEY, INTEGER, AUTO_INCREMENT): Unique block identifier
+- `blocker_id` (INTEGER, NOT NULL, FOREIGN KEY references `users.id`): User who is blocking
+- `blocked_id` (INTEGER, NOT NULL, FOREIGN KEY references `users.id`): User who is blocked
+- `created_at` (TIMESTAMP, NOT NULL, DEFAULT CURRENT_TIMESTAMP): When block was created
+
+**Indexes:**
+- PRIMARY KEY on `id`
+- UNIQUE INDEX on (`blocker_id`, `blocked_id`)
+- INDEX on `blocker_id`
+- INDEX on `blocked_id`
+
+### email_verification_tokens
+
+Stores email verification tokens for user email verification (both initial sign-up and email changes).
+
+**Columns:**
+- `id` (PRIMARY KEY, INTEGER, AUTO_INCREMENT): Unique token identifier
+- `user_id` (INTEGER, NULLABLE, FOREIGN KEY references `users.id`): User account (NULL if user not yet created, references signup request; NOT NULL for email change verification)
+- `signup_request_id` (INTEGER, NULLABLE, FOREIGN KEY references `user_signup_requests.id`): Sign-up request (if verification is for pending signup)
+- `email` (TEXT, NOT NULL): Email address being verified (new email address for email changes)
+- `old_email` (TEXT, NULLABLE): Previous email address (only set when verifying an email change)
+- `token` (TEXT, NOT NULL, UNIQUE): Unique verification token (cryptographically secure random string)
+- `verification_type` (TEXT, NOT NULL, DEFAULT 'signup'): Type of verification - one of: `"signup"`, `"email_change"`
+- `expires_at` (TIMESTAMP, NOT NULL): Token expiration timestamp (24 hours from creation)
+- `verified_at` (TIMESTAMP, NULLABLE): When token was verified (NULL if not yet verified)
+- `created_at` (TIMESTAMP, NOT NULL, DEFAULT CURRENT_TIMESTAMP): Token creation timestamp
+
+**Indexes:**
+- PRIMARY KEY on `id`
+- UNIQUE INDEX on `token`
+- INDEX on `email`
+- INDEX on `expires_at`
+- INDEX on `user_id`
+- INDEX on `signup_request_id`
+- INDEX on `verification_type`
+
+**Notes:**
+- All timestamps are stored in UTC
+- All monetary amounts use DECIMAL(10,2) for precision
+- Foreign keys should have appropriate CASCADE or RESTRICT rules based on business logic
+- Soft deletes (is_deleted flags) are used where appropriate instead of hard deletes
+- Text fields use TEXT type to support variable-length content
+- All sensitive data (passwords, Stripe IDs) should be encrypted at rest
+
+## Feature Request Card Display
+
+Each feature request card in the list displays:
+- Title: The title of the feature request
+- App: The app name that the feature request is for
+- Request Type: The type of the request (UI/UX or backend)
+- Request Category: The category of the request (bug or enhancement)
+- Date Requested: The date of the first comment in the comment section
+- Total Bid Amount: The total amount of money bid for the request (summed from comments)
+- Status: The status of the request (requested, in_progress, completed, confirmed, cancelled)
+- Delivered Date: The date the feature was delivered (only shown if status is completed or confirmed)
+- Projected Completion Date: The date the feature is projected to be completed (only shown if status is in_progress)
+
+
+## Payment Currencies
+
+- Have the default currency be CAD, but users can change this in their account settings
+- In the request section, show the individual bids in the currency the bidding user selected
+- When summing the total bid amount, sum to the currency the viewing user has selected (i.e., if the viewing user is in USD and the bidding user is in CAD, the total bid amount should be displayed in USD)
+- When payment is made, Stripe collects money from each requester's Stripe account in their preferred currency
+- When paying devs:
+  - Determine the most common payout currency by calculating which currency has the highest total payout amount (based on dev payment ratios and preferred currencies)
+  - Convert total collected amount to the target payout currency (if not already in that currency)
+  - Split by pay ratio in the target payout currency
+  - For each dev: if their preferred currency matches the target, no conversion needed; otherwise convert their share to their preferred currency
+- All currency conversions are handled automatically by Stripe at market rates
+- If all devs have the same preferred currency, that becomes the target and no intermediate conversion is needed
+
+---
+
+## Implementation Notes and Considerations
+
+### Data Model Considerations
+
+1. **Request Type and Category:**
+   - These fields are mandatory and must be set when creating a request
+   - Request type must be either "UI/UX" or "Backend" (dropdown/radio selection)
+   - Request category must be either "Bug" or "Enhancement" (dropdown/radio selection)
+   - Devs can edit these, but original requester cannot after creation
+   - Validation required: both fields must be selected before request can be created
+
+2. **App Display Name vs App Name:**
+   - App name is the internal identifier (used in URLs, API calls, etc.)
+   - App display name is what users see in the UI
+   - **REQUIRED**: App name must be URL/endpoint safe - validation must enforce:
+     - Only alphanumeric characters, hyphens (-), and underscores (_) allowed
+     - No spaces or special characters
+     - Must be unique
+     - Consider case sensitivity rules (recommend lowercase only)
+
+3. **Icon Management:**
+   - Need to handle icon storage ( store them in git ignored instance folder)
+   - "Get icon from site" feature requires:
+     - HTTP request to app URL
+     - Parsing HTML for favicon link
+     - Downloading and storing the icon
+     - Error handling if favicon not found or URL unreachable
+
+### UI/UX Considerations
+
+1. **App Filter Dropdown:**
+   - Should be prominently placed (likely top of page or in a filter bar)
+   - Consider search/autocomplete for apps with many entries
+   - "All" option should be clearly visible
+   - Current selection should be visually indicated
+
+2. **Stats Section Filtering:**
+   - Filtering by card attributes means supporting:
+     - Status filtering (requested, in_progress, completed, confirmed, cancelled)
+     - Request type filtering
+     - Category filtering
+     - Date range filtering (for date requested, delivered date, projected completion)
+     - Bid amount ranges
+   - Consider multi-select filters and filter combinations
+   - Filter state should be persistent or easily resettable
+
+3. **Feature Request Cards:**
+   - cards should be two lines, major line is the request name, then underneath we have the app name and the category and type, on the far right we have the total bid amount
+   - Consider responsive design for mobile devices
+
+### Technical Implementation Notes
+
+1. **Currency Conversion:**
+   - Stripe handles all currency conversion automatically
+   - Exchange rates are provided by Stripe at market rates
+   - Store original bid amounts in original currency for accuracy
+   - Display conversions use Stripe's rates (can be cached for performance)
+
+2. **Payment Processing (Stripe Connect):**
+   - Use Stripe Connect for all payment operations
+   - Implement Stripe OAuth Connect flow for user onboarding
+   - Use Stripe Payment Intents API for collecting payments
+   - Use Stripe Transfers API for paying devs
+   - Implement webhook handlers for payment events (payment_intent.succeeded, transfer.created, etc.)
+   - Handle payment failures and retries (Stripe provides retry mechanisms)
+   - Funds are held by Stripe until confirmation threshold is met, then collected and distributed
+
+3. **Similar Request Detection:**
+   - Keyword matching: Simple but may have false positives
+   - Title similarity: Use string similarity algorithms (Levenshtein, Jaccard, etc.)
+   - Consider combining multiple approaches
+   - the user is presented with the candidates and can select to tag their request onto one of them which case this gets added as a comment to the selected request and their bid is part of the main request
+   - if the user decided none of the shown requests are similar, they can create a new request and it will be added to the list of requests for that app
+   - Show up to 5 requests based on a similarity threshold (configurable in config.json)
+  - Similarity threshold and max results count are configurable in config.json
+
+
+4. **Email System (Verification and Notifications):**
+   - **Python-based email processing**: Use Python's built-in `smtplib` library or third-party libraries (e.g., `flask-mail`, `django.core.mail`) for sending emails
+   - **Free Email Service Options** (recommended for cost-effective implementation):
+     - **Gmail SMTP**: Free with app-specific passwords (requires Gmail account)
+     - **Mailgun**: Free tier includes 5,000 emails/month
+     - **SendGrid**: Free tier with limited monthly sends
+     - **Brevo (formerly Sendinblue)**: Free tier available
+     - **SMTP Server**: Can use any SMTP server (Gmail, Outlook, custom domain SMTP, etc.)
+   - **Email Template Management**:
+     - Email content (subject, body) is editable by admin through admin interface
+     - each email type has a separate template, with the following types:
+       - Email verification
+       - Password reset
+       - Notification types (new message, new request, status change, comments, payments, etc.)
+     - Templates stored in `instance/email_templates.json` (not git-backed)
+     - Admin uses rich text editor (like Word) with features:
+       - Font selection, font size, bold, underline, italic
+       - Text color, background color
+       - Image insertion/paste
+       - Link insertion
+       - Basic formatting options
+     - Templates support variables (e.g., `{user_name}`, `{verification_link}`, `{app_name}`)
+   - **Email Configuration** (stored in `instance/email_config.json`, not git-backed):
+     - **From Email Mask**: The email address users see in their inbox (e.g., "noreply@feature-requestor.com")
+     - **Real From Email**: The actual email address used for sending (SMTP username)
+     - **SMTP Server Settings**:
+       - SMTP server hostname (e.g., "smtp.gmail.com")
+       - SMTP port (e.g., 587 for TLS, 465 for SSL)
+       - Connection security (TLS/SSL/None)
+       - SMTP username (email address)
+       - SMTP password (app-specific password or account password)
+       - Any additional connection parameters required by the email provider
+   - **Email Verification**:
+     - Verification emails contain a unique link with a token
+     - Token expires after 24 hours
+     - Link format: `/verify-email?token={verification_token}`
+     - When clicked, validates token and marks email as verified
+     - **Verification Triggers**:
+       - Initial sign-up: Verification email sent immediately after user fills in sign-up information (before instructions/quiz)
+       - Email change: Verification email sent immediately when user changes their email address in account settings
+     - Users can request resend of verification email from their account page
+     - When email is changed, old email remains in use until new email is verified, then old email is replaced
+   - **Email Notifications**:
+     - Template system for different notification types
+     - Respect user notification preferences
+     - create a cahing system for notifications, once an event that requires a notification fro a user is detected ti is added to a que with a 30 minute timer, if other notificatiosn for the same user are detected within the 30 minute timer, they are added to the same queue and the timer is reset, once the timer expires, the notifications are sent to the user's email address in a single email combingin all the notifications into one email
+     - Notifications are sent to the user's email address
+     - Users can select: no notification, immediate notification, or bulk notification for each type of notification
+     - On "no": no notification is sent
+     - On "immediate": the notification is sent immediately
+     - On "bulk": the notification is sent in a bulk email to the user's email address
+     - Bulk notifications are sent daily if there are any notifications to send
+   - **Admin Email Configuration Page**:
+     - Admin can configure all email settings through admin interface
+     - Edit email templates using rich text editor
+     - Set "from email mask" (display name/address)
+     - Configure SMTP connection settings (server, port, credentials)
+     - Test email sending functionality
+     - Preview email templates with sample data
+
+5. **Database Design:**
+   - Consider indexing on frequently queried fields (app, status, date_requested, etc.)
+   - Message threads need efficient querying
+   - Payment history should be auditable
+   - Consider soft deletes for important records
+
+### Security Considerations
+
+1. **Payment Information:**
+   - Never store credit card numbers, bank account numbers, or other sensitive payment data
+   - Only store Stripe account IDs (non-sensitive identifiers)
+   - All sensitive payment data is handled by Stripe (PCI compliant)
+   - Use Stripe's secure APIs for all payment operations
+   - Implement proper webhook signature verification for Stripe webhooks
+   - Encrypt Stripe account IDs in database (defense in depth)
+
+2. **User Authentication:**
+   - Email verification is required - need email service
+   - Password reset functionality
+   - Consider 2FA for admin accounts
+
+3. **Admin Functions:**
+   - Audit logging for admin actions (especially database operations)
+   - Backup/restore should be secure (encrypted backups)
+   - Raw data table viewing should mask sensitive info (already specified)
+
+### Missing Specifications to Clarify
+
+
+4. **Currency:**
+   - Which currencies are supported? to start with CAD, USD, and EUR
+   - How often are exchange rates updated? daily
