@@ -54,6 +54,23 @@ def index():
             ).first()
             if participant and not participant.is_blocked:
                 messages = Message.query.filter_by(thread_id=thread_id).order_by(Message.created_at.asc()).all()
+                # Load poll votes for each message
+                for message in messages:
+                    if message.is_poll:
+                        poll_votes = MessagePollVote.query.filter_by(message_id=message.id).all()
+                        message._poll_votes = poll_votes
+                        # Create a dictionary mapping user_id to vote for easier template access
+                        message._poll_votes_dict = {vote.user_id: vote for vote in poll_votes}
+                        # Get current user's vote if exists
+                        message._user_vote = MessagePollVote.query.filter_by(
+                            message_id=message.id,
+                            user_id=current_user.id
+                        ).first()
+                    else:
+                        # Set empty values for non-poll messages to avoid template errors
+                        message._poll_votes = []
+                        message._poll_votes_dict = {}
+                        message._user_vote = None
                 # Mark as read
                 participant.last_read_at = db.func.now()
                 db.session.commit()
@@ -189,12 +206,14 @@ def add_user_to_thread(thread_id):
         db.session.commit()
     
     # Create poll message
+    user_to_add = User.query.get(user_id)
     poll_message = Message(
         thread_id=thread_id,
         sender_id=current_user.id,
-        message=f"Request to add {User.query.get(user_id).name} to this thread",
+        message=f"Request to add {user_to_add.name} to this thread",
         is_poll=True,
-        poll_type='add_user'
+        poll_type='add_user',
+        poll_target_user_id=user_id
     )
     db.session.add(poll_message)
     db.session.flush()
@@ -253,18 +272,65 @@ def vote_on_poll(message_id):
     
     # Check if all participants have approved
     if message.poll_type == 'add_user':
+        # Get all non-blocked participants at the time of checking
         all_participants = MessageThreadParticipant.query.filter_by(
             thread_id=message.thread_id,
             is_blocked=False
         ).all()
         all_votes = MessagePollVote.query.filter_by(message_id=message_id).all()
         
-        if len(all_votes) == len(all_participants):
+        # Check if we have votes from all participants
+        participant_ids = {p.user_id for p in all_participants}
+        vote_user_ids = {v.user_id for v in all_votes}
+        
+        if participant_ids == vote_user_ids and len(all_votes) > 0:
             all_approved = all(v.vote == 'approve' for v in all_votes)
             if all_approved:
-                # Extract user_id from message (simplified - in real implementation, store in separate field)
-                # For now, we'll need to parse it or store it differently
-                flash('All participants approved. User will be added.', 'success')
+                # Get user_id from poll_target_user_id field (explicit storage)
+                if message.poll_target_user_id:
+                    user_to_add = User.query.get(message.poll_target_user_id)
+                else:
+                    # Fallback: try to parse from old message format (for backward compatibility)
+                    import re
+                    user_id_match = re.search(r'\[user_id:(\d+)\]', message.message)
+                    if user_id_match:
+                        user_id_to_add = int(user_id_match.group(1))
+                        user_to_add = User.query.get(user_id_to_add)
+                    else:
+                        # Last resort: parse user name from message text
+                        name_match = re.search(r'Request to add (.+?) to this thread', message.message)
+                        if name_match:
+                            user_name = name_match.group(1).strip()
+                            user_to_add = User.query.filter_by(name=user_name).first()
+                        else:
+                            user_to_add = None
+                
+                if user_to_add:
+                    # Check if user is already in thread
+                    existing_participant = MessageThreadParticipant.query.filter_by(
+                        thread_id=message.thread_id,
+                        user_id=user_to_add.id
+                    ).first()
+                    
+                    if not existing_participant:
+                        # Add user to thread
+                        new_participant = MessageThreadParticipant(
+                            thread_id=message.thread_id,
+                            user_id=user_to_add.id
+                        )
+                        db.session.add(new_participant)
+                        
+                        # Update thread updated_at
+                        from datetime import datetime
+                        thread = message.thread
+                        thread.updated_at = datetime.utcnow()
+                        
+                        db.session.commit()
+                        flash(f'{user_to_add.name} has been added to the thread.', 'success')
+                    else:
+                        flash('User is already in this thread.', 'info')
+                else:
+                    flash('Could not find user to add.', 'error')
     
     return redirect(url_for('messages.index', thread_id=message.thread_id))
 

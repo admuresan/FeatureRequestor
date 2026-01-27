@@ -164,12 +164,62 @@
                             </div>
                             {% if message.is_poll %}
                                 <div class="poll-section">
-                                    <p>Poll: {{ message.poll_type }}</p>
+                                    <p><strong>Poll: {{ message.poll_type }}</strong></p>
                                     {% if message.poll_type == 'add_user' %}
-                                        <form method="POST" action="{{ url_for('messages.vote_on_poll', message_id=message.id) }}" style="display:inline;">
-                                            <button type="submit" name="vote" value="approve" class="btn btn-sm btn-success">Approve</button>
-                                            <button type="submit" name="vote" value="reject" class="btn btn-sm btn-danger">Reject</button>
-                                        </form>
+                                        {% set poll_votes = message._poll_votes|default([]) %}
+                                        {% set user_vote = message._user_vote|default(none) %}
+                                        {% set thread_participants = current_thread._participants_list %}
+                                        
+                                        <div class="poll-votes-list" style="margin: 0.75rem 0;">
+                                            {% set poll_votes_dict = message._poll_votes_dict|default({}) %}
+                                            {% for participant in thread_participants %}
+                                                {% if not participant.is_blocked %}
+                                                    {% set participant_vote = poll_votes_dict[participant.user_id] if participant.user_id in poll_votes_dict else none %}
+                                                    <div class="poll-vote-item" style="display: flex; justify-content: space-between; align-items: center; padding: 0.5rem 0; border-bottom: 1px solid #f0f0f0;">
+                                                        <span>
+                                                            {{ participant.user.username }}
+                                                            {% if participant.user_id == current_user.id %}
+                                                                <span style="color: #666; font-size: 0.9rem;">(You)</span>
+                                                            {% endif %}
+                                                        </span>
+                                                        <span class="poll-vote-status">
+                                                            {% if participant_vote %}
+                                                                {% if participant_vote.vote == 'approve' %}
+                                                                    <span style="color: #28a745; font-weight: 500;">✓ Approved</span>
+                                                                {% else %}
+                                                                    <span style="color: #dc3545; font-weight: 500;">✗ Rejected</span>
+                                                                {% endif %}
+                                                            {% else %}
+                                                                <span style="color: #6c757d;">Pending</span>
+                                                            {% endif %}
+                                                        </span>
+                                                    </div>
+                                                {% endif %}
+                                            {% endfor %}
+                                        </div>
+                                        
+                                        {% if not user_vote %}
+                                            <form method="POST" action="{{ url_for('messages.vote_on_poll', message_id=message.id) }}" style="margin-top: 0.75rem;">
+                                                <button type="submit" name="vote" value="approve" class="btn btn-sm btn-success">Approve</button>
+                                                <button type="submit" name="vote" value="reject" class="btn btn-sm btn-danger">Reject</button>
+                                            </form>
+                                        {% else %}
+                                            <div style="margin-top: 0.75rem; padding: 0.5rem; background: #f8f9fa; border-radius: 4px;">
+                                                <span style="color: #6c757d; font-size: 0.9rem;">
+                                                    You voted: 
+                                                    {% if user_vote.vote == 'approve' %}
+                                                        <strong style="color: #28a745;">Approved</strong>
+                                                    {% else %}
+                                                        <strong style="color: #dc3545;">Rejected</strong>
+                                                    {% endif %}
+                                                </span>
+                                                <form method="POST" action="{{ url_for('messages.vote_on_poll', message_id=message.id) }}" style="display: inline; margin-left: 0.5rem;">
+                                                    <button type="submit" name="vote" value="{% if user_vote.vote == 'approve' %}reject{% else %}approve{% endif %}" class="btn btn-sm btn-outline-secondary" style="padding: 0.25rem 0.5rem; font-size: 0.85rem;">
+                                                        Change to {% if user_vote.vote == 'approve' %}Reject{% else %}Approve{% endif %}
+                                                    </button>
+                                                </form>
+                                            </div>
+                                        {% endif %}
                                     {% endif %}
                                 </div>
                             {% endif %}
@@ -258,6 +308,26 @@
 
 .message-time {
     color: #666;
+}
+
+.poll-section {
+    margin-top: 0.75rem;
+    padding: 0.75rem;
+    background: #f8f9fa;
+    border-radius: 4px;
+    border-left: 3px solid #007bff;
+}
+
+.poll-votes-list {
+    margin: 0.75rem 0;
+}
+
+.poll-vote-item:last-child {
+    border-bottom: none !important;
+}
+
+.poll-vote-status {
+    font-size: 0.9rem;
 }
 
 .thread-item {

@@ -224,7 +224,7 @@ def init_db():
                 db.session.execute(text("ALTER TABLE message_threads ADD COLUMN thread_type TEXT NOT NULL DEFAULT 'direct'"))
                 db.session.commit()
         
-        # Check messages table for is_poll and poll_type
+        # Check messages table for is_poll, poll_type, and poll_target_user_id
         if inspector.has_table('messages'):
             columns = [col['name'] for col in inspector.get_columns('messages')]
             if 'is_poll' not in columns:
@@ -232,6 +232,9 @@ def init_db():
                 db.session.commit()
             if 'poll_type' not in columns:
                 db.session.execute(text('ALTER TABLE messages ADD COLUMN poll_type TEXT'))
+                db.session.commit()
+            if 'poll_target_user_id' not in columns:
+                db.session.execute(text('ALTER TABLE messages ADD COLUMN poll_target_user_id INTEGER REFERENCES users(id)'))
                 db.session.commit()
         
         # Check message_thread_participants table for is_blocked and last_read_at

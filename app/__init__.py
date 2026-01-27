@@ -7,6 +7,7 @@ See instructions/architecture for development guidelines.
 from flask import Flask, url_for
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager
+from werkzeug.middleware.proxy_fix import ProxyFix
 import os
 from pathlib import Path
 
@@ -39,6 +40,25 @@ def create_app(config_name='default'):
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
     app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
     
+    # CRITICAL: Configure ProxyFix BEFORE extensions and routes
+    # This allows the app to work properly when proxied by AppManager
+    # ProxyFix is safe to use even when not behind a proxy - it only processes
+    # X-Forwarded-* headers if they're present. If not present, requests pass through unchanged.
+    try:
+        app.wsgi_app = ProxyFix(
+            app.wsgi_app,
+            x_for=1,      # Number of proxies in front (AppManager = 1)
+            x_proto=1,    # Trust X-Forwarded-Proto header
+            x_host=1,     # Trust X-Forwarded-Host header
+            x_port=1,     # Trust X-Forwarded-Port header
+            x_prefix=1    # Trust X-Forwarded-Prefix header
+        )
+    except ImportError:
+        # ProxyFix not available (older Werkzeug version)
+        # App will still work, but may not properly handle reverse proxy headers
+        import warnings
+        warnings.warn("werkzeug.middleware.proxy_fix not available. Install werkzeug>=0.15.0 for proxy support.")
+    
     # Initialize extensions
     db.init_app(app)
     login_manager.init_app(app)
@@ -54,8 +74,23 @@ def create_app(config_name='default'):
         view_as_user_id = session.get('view_as_user_id')
         if view_as_user_id:
             # Return the user being viewed
-            return User.query.get(int(view_as_user_id))
-        return User.query.get(int(user_id))
+            try:
+                return User.query.get(int(view_as_user_id))
+            except (ValueError, TypeError):
+                return None
+        
+        # Handle user_id - it should be numeric, but handle edge cases
+        try:
+            # Try to convert to int (normal case)
+            user_id_int = int(user_id)
+            return User.query.get(user_id_int)
+        except (ValueError, TypeError):
+            # If user_id is not numeric (e.g., username string), try to find by username
+            # This can happen if session cookies get corrupted or mixed between apps
+            try:
+                return User.query.filter_by(username=str(user_id)).first()
+            except Exception:
+                return None
     
     # Register blueprints
     from app.routes import auth, api, feature_requests, apps, home, messages, admin, stripe, account, receipts, quiz, rules, notifications

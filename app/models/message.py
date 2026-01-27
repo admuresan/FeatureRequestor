@@ -50,10 +50,12 @@ class Message(db.Model):
     message = db.Column(db.Text, nullable=False)
     is_poll = db.Column(db.Boolean, nullable=False, default=False)
     poll_type = db.Column(db.Text, nullable=True)  # 'add_user' or NULL
+    poll_target_user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)  # User to add for add_user polls
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     
     # Relationships
-    sender = db.relationship('User', backref='sent_messages')
+    sender = db.relationship('User', backref='sent_messages', foreign_keys=[sender_id])
+    poll_target_user = db.relationship('User', backref='poll_target_messages', foreign_keys=[poll_target_user_id])
     poll_votes = db.relationship('MessagePollVote', backref='message', lazy='dynamic', cascade='all, delete-orphan')
     
     def __repr__(self):
