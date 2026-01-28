@@ -1174,12 +1174,22 @@ body.sidebar-collapsed .main-with-sidebar,
     box-shadow: var(--shadow-md);
     background: var(--bg-primary);
     min-width: 0;
+    width: 100%;
+    max-width: 100%;
     -webkit-overflow-scrolling: touch;
 }
 
 .table-container .admin-table {
     margin-top: 0;
     box-shadow: none;
+}
+
+/* Admin apps container */
+.admin-apps {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
 }
 
 /* Admin users page container */

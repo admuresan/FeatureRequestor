@@ -39,9 +39,9 @@ if __name__ == '__main__':
     # Production settings - port from environment variable or config
     port = get_port()
     
-    # Use 127.0.0.1 when behind AppManager proxy (recommended for security)
-    # Use 0.0.0.0 if the app needs to be accessible from outside the host
-    host = os.environ.get('HOST', '127.0.0.1')
+    # Direct port access: bind publicly by default.
+    # Override with HOST env var if you need localhost-only binding.
+    host = os.environ.get('HOST', '0.0.0.0')
     
     print(f"Starting Feature Requestor on {host}:{port}...")
     app.run(host=host, port=port, debug=False)

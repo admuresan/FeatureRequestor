@@ -44,9 +44,9 @@ if __name__ == '__main__':
         print("Auto-reload enabled - changes will automatically update the app")
         app.run(host='127.0.0.1', port=port, debug=True)
     else:
-        # Production mode - bind to localhost for AppManager proxy compatibility
-        # AppManager will handle external access
-        print(f"Running in PRODUCTION mode on http://127.0.0.1:{port}")
+        # Production mode - direct port access
+        host = os.environ.get('HOST', '0.0.0.0')
+        print(f"Running in PRODUCTION mode on http://{host}:{port}")
         print("Auto-reload disabled - restart server to see changes")
-        app.run(host='127.0.0.1', port=port, debug=False)
+        app.run(host=host, port=port, debug=False)
 

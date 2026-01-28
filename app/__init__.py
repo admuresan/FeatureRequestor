@@ -36,6 +36,9 @@ def create_app(config_name='default'):
     
     # Configure app
     app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
+    # Cookie isolation: multiple apps share the same domain, so cookie names must be unique per app.
+    app.config['SESSION_COOKIE_NAME'] = os.environ.get('SESSION_COOKIE_NAME', 'feature_requestor_session')
+    app.config['REMEMBER_COOKIE_NAME'] = os.environ.get('REMEMBER_COOKIE_NAME', 'feature_requestor_remember')
     app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{instance_path}/data/feature_requestor.db'
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
     app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
