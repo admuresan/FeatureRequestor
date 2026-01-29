@@ -90,7 +90,6 @@ if command -v rsync &> /dev/null; then
         --exclude='*.bat' \
         --exclude='instance' \
         --exclude='ssh' \
-        --exclude='*.md' \
         --exclude='instructions' \
         ./ "$DEPLOY_DIR/"
     
@@ -173,7 +172,6 @@ REMOTE_EOF
         --exclude='*.bat' \
         --exclude='instance' \
         --exclude='ssh' \
-        --exclude='*.md' \
         --exclude='instructions' \
         --exclude='deploy.sh' \
         -czf - . | ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "$SERVER_USER@$SERVER_IP" "sudo mkdir -p $APP_DIR && sudo chown -R ubuntu:ubuntu $APP_DIR && cd $APP_DIR && tar -xzf -"

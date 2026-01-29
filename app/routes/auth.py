@@ -6,11 +6,38 @@ See instructions/architecture for development guidelines.
 
 from flask import Blueprint, render_template, request, redirect, url_for, flash, session
 from flask_login import login_user, logout_user, login_required, current_user
+from urllib.parse import urlparse
 from app import db
 from app.models import User, UserSignupRequest
 from app.utils.auth import hash_password, verify_password, generate_username
 
 bp = Blueprint('auth', __name__, url_prefix='/auth')
+
+def is_safe_url(target):
+    """
+    Validate that the target URL is safe to redirect to.
+    Prevents open redirects and redirects to old proxy paths.
+    """
+    if not target:
+        return False
+    
+    # Parse the URL
+    parsed = urlparse(target)
+    
+    # Reject URLs with schemes (http://, https://, etc.) - only allow relative URLs
+    if parsed.scheme:
+        return False
+    
+    # Reject URLs that start with // (protocol-relative URLs)
+    if target.startswith('//'):
+        return False
+    
+    # Reject URLs containing the old proxy path
+    if '/feature-requestor' in target:
+        return False
+    
+    # Allow relative URLs (starting with /) or empty string
+    return True
 
 @bp.route('/login', methods=['GET', 'POST'])
 def login():
@@ -31,8 +58,12 @@ def login():
         
         if user and verify_password(password, user.password_hash):
             login_user(user, remember=remember)
-            next_page = request.args.get('next') or url_for('home.index')
-            return redirect(next_page)
+            next_page = request.args.get('next')
+            # Validate next_page to prevent redirects to external URLs or old proxy paths
+            if next_page and is_safe_url(next_page):
+                return redirect(next_page)
+            else:
+                return redirect(url_for('home.index'))
         else:
             flash('Invalid username or password.', 'error')
     
