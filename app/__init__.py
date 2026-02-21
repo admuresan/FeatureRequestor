@@ -39,6 +39,8 @@ def create_app(config_name='default'):
     # Cookie isolation: multiple apps share the same domain, so cookie names must be unique per app.
     app.config['SESSION_COOKIE_NAME'] = os.environ.get('SESSION_COOKIE_NAME', 'feature_requestor_session')
     app.config['REMEMBER_COOKIE_NAME'] = os.environ.get('REMEMBER_COOKIE_NAME', 'feature_requestor_remember')
+    app.config['SESSION_COOKIE_PATH'] = os.environ.get('APPLICATION_ROOT', '') or '/'
+    app.config['REMEMBER_COOKIE_PATH'] = os.environ.get('APPLICATION_ROOT', '') or '/'
     app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{instance_path}/data/feature_requestor.db'
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
     app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
@@ -95,6 +97,18 @@ def create_app(config_name='default'):
             except Exception:
                 return None
     
+    # Serve logo.png from project root (standardized across apps)
+    project_root = Path(__file__).parent.parent
+    logo_path = project_root / 'logo.png'
+
+    @app.route('/logo.png')
+    def serve_logo():
+        """Serve logo.png from project root as app icon."""
+        from flask import send_file, abort
+        if logo_path.is_file():
+            return send_file(str(logo_path), mimetype='image/png')
+        abort(404)
+
     # Register blueprints
     from app.routes import auth, api, feature_requests, apps, home, messages, admin, stripe, account, receipts, quiz, rules, notifications
     app.register_blueprint(auth.bp)
@@ -151,11 +165,12 @@ def create_app(config_name='default'):
     # Context processor for icon URL
     @app.context_processor
     def inject_icon_url():
-        """Make icon URL available to all templates."""
-        from flask import session
+        """Make icon URL available to all templates. Prefer instance/icon.png, else logo.png at project root."""
+        from flask import session, url_for
         from flask_login import current_user
         icon_path = instance_path / 'icon.png'
         has_icon = icon_path.exists()
+        has_logo = logo_path.is_file()
         
         # Check if admin is in view-as mode
         is_view_as_mode = bool(session.get('view_as_user_id'))
@@ -203,8 +218,8 @@ def create_app(config_name='default'):
                 unread_message_count += unread_messages
         
         return {
-            'has_custom_icon': has_icon,
-            'icon_url': url_for('admin.serve_icon') if has_icon else None,
+            'has_custom_icon': has_icon or has_logo,
+            'icon_url': url_for('admin.serve_icon') if has_icon else (url_for('serve_logo') if has_logo else None),
             'is_view_as_mode': is_view_as_mode,
             'actual_admin': actual_admin,
             'unread_notification_count': unread_notification_count,
